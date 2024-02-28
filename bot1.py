@@ -9,9 +9,10 @@ from termcolor import colored
 GridPointAttrib = {}
 
 class Grid:
-    def __init__(self, D=30):
+    def __init__(self, D=30, debug=True):
         self.D = D
         self.grid = []
+        self.debug = debug
         self.gen_grid()
 
     def valid_index(self, ind):
@@ -67,11 +68,13 @@ class Grid:
                         open_neighbors.append(neighbor_ind)
                 if len(open_neighbors) == 1:
                     cells_to_open.append((i, j))
-        for index in cells_to_open:
+        if len(cells_to_open) > 0:
+            index = random.choice(cells_to_open)
             self.grid[index[1]][index[0]]['open'] = True
-        print("After one iteration")
-        print(self)
-        print(f"Cells to open: {len(cells_to_open)}")
+        if self.debug:
+            print("After one iteration")
+            print(self)
+            print(f"Cells to open: {len(cells_to_open)}")
         return len(cells_to_open) != 0
 
     def gen_grid(self):
@@ -89,8 +92,19 @@ class Grid:
         print(self)
         while self.gen_grid_iterate():
             pass
-        print("After end")
-        print(self)
+        cells_to_open = []
+        for j in range(self.D):
+            for i in range(self.D):
+                    all_neighbors = self.get_neighbors((i,j))
+                    open_neighbors = [ind for ind in all_neighbors if self.grid[ind[1]][ind[0]]['open']]
+                    closed_neighbors = [ind for ind in all_neighbors if not self.grid[ind[1]][ind[0]]['open']]
+                    if self.grid[j][i]['open'] and random.randint(0, 1) == 1 and len(open_neighbors) == 1:
+                        cells_to_open.append(random.choice(closed_neighbors))
+        for ind in cells_to_open:
+            self.grid[ind[1]][ind[0]]['open'] = True
+        if self.debug:
+            print("After dead end opening")
+            print(self)
 
     def place_alien(self, ind, alien_id):
         self.grid[ind[1]][ind[0]]['alien_id'] = alien_id
@@ -195,15 +209,17 @@ class PathTreeNode:
 
 
 class Bot1:
-    def __init__(self, grid, captain_ind):
+    def __init__(self, grid, captain_ind, debug=True):
         self.grid = grid
         self.captain_ind = captain_ind
         self.ind = random.choice(self.grid.get_open_indices())
         self.grid.place_bot(self.ind)
         self.path = deque([])
+        self.debug = debug
 
     def plan_path(self):
-        print("Planning Path...")  # If path is empty we plan one
+        if self.debug:
+            print("Planning Path...")  # If path is empty we plan one
         self.grid.remove_all_traversal()
         captain_found = False
         path_tree = PathTreeNode()
@@ -215,7 +231,8 @@ class Bot1:
                 #raise RuntimeError("No Path Found!!!")
                 return
             node = path_deque.popleft()
-            print(f"Current Node: {node.data}")
+            if self.debug:
+                print(f"Current Node: {node.data}")
             ind = node.data
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
@@ -231,7 +248,8 @@ class Bot1:
                     node.children.append(new_node)
             path_deque.extend(node.children)
         self.grid.remove_all_traversal()
-        print("Planning Done!")
+        if self.debug:
+            print("Planning Done!")
         reverse_path = []
         node = destination
         while node.parent is not None:
@@ -240,14 +258,16 @@ class Bot1:
         self.path.extend(reversed(reverse_path))
         for ind in self.path:
             self.grid.set_traversed(ind)
-        print("Planned Path")
-        print(self.grid)
+        if self.debug:
+            print("Planned Path")
+            print(self.grid)
 
     def move(self):
         if not self.path:
             self.plan_path()
         if len(self.path) == 0:
-            print("No path found!")
+            if self.debug:
+                print("No path found!")
             return
 
         next_dest = self.path.popleft()
@@ -258,15 +278,17 @@ class Bot1:
 
 
 class Bot2:
-    def __init__(self, grid, captain_ind):
+    def __init__(self, grid, captain_ind, debug = True):
         self.grid = grid
         self.captain_ind = captain_ind
         self.ind = random.choice(self.grid.get_open_indices())
         self.grid.place_bot(self.ind)
         self.path = deque([])
+        self.debug = debug
 
     def plan_path(self):
-        print("Planning Path...")  # If path is empty we plan one
+        if self.debug:
+            print("Planning Path...")  # If path is empty we plan one
         self.path = deque([])
         self.grid.remove_all_traversal()
         captain_found = False
@@ -295,7 +317,8 @@ class Bot2:
                     node.children.append(new_node)
             path_deque.extend(node.children)
         self.grid.remove_all_traversal()
-        print("Planning Done!")
+        if self.debug:
+            print("Planning Done!")
         reverse_path = []
         node = destination
         while node.parent is not None:
@@ -304,13 +327,15 @@ class Bot2:
         self.path.extend(reversed(reverse_path))
         for ind in self.path:
             self.grid.set_traversed(ind)
-        print("Planned Path")
-        print(self.grid)
+        if self.debug:
+            print("Planned Path")
+            print(self.grid)
 
     def move(self):
         self.plan_path()
         if len(self.path) == 0:
-            print("No path found!")
+            if self.debug:
+                print("No path found!")
             return
         next_dest = self.path.popleft()
         self.grid.remove_bot(self.ind)
@@ -319,15 +344,17 @@ class Bot2:
 
 
 class Bot3:
-    def __init__(self, grid, captain_ind):
+    def __init__(self, grid, captain_ind, debug = True):
         self.grid = grid
         self.captain_ind = captain_ind
         self.ind = random.choice(self.grid.get_open_indices())
         self.grid.place_bot(self.ind)
         self.path = deque([])
+        self.debug = debug
 
     def plan_path(self, k=2):
-        print("Planning Path...")  # If path is empty we plan one
+        if self.debug:
+            print("Planning Path...")  # If path is empty we plan one
         self.path = deque([])
         self.grid.remove_all_traversal()
         captain_found = False
@@ -356,7 +383,8 @@ class Bot3:
                     node.children.append(new_node)
             path_deque.extend(node.children)
         self.grid.remove_all_traversal()
-        print("Planning Done!")
+        if self.debug:
+            print("Planning Done!")
         reverse_path = []
         node = destination
         while node.parent is not None:
@@ -365,26 +393,35 @@ class Bot3:
         self.path.extend(reversed(reverse_path))
         for ind in self.path:
             self.grid.set_traversed(ind)
-        print("Planned Path")
-        print(self.grid)
+        if self.debug:
+            print("Planned Path")
+            print(self.grid)
 
     def move(self):
         self.plan_path(2)
         if len(self.path) == 0:
-            print("Reverting...")
+            if self.debug:
+                print("Reverting...")
             self.plan_path(1)
             if len(self.path) == 0:
-                print("No path found")
+                if self.debug:
+                    print("No path found")
                 return
         next_dest = self.path.popleft()
         self.grid.remove_bot(self.ind)
         self.ind = next_dest
         self.grid.place_bot(self.ind)
-grid = Grid()
+class Word:
+    def __init__(self, debug=True):
+        self.debug = debug
+        self.grid = Grid(debug=debug)
+        self.captain_ind = random.choice(self.grid.get_open_indices())
+debug = False
+grid = Grid(debug=debug)
 captain_ind = random.choice(grid.get_open_indices())
-bot = Bot3(grid, captain_ind)
+bot = Bot3(grid, captain_ind, debug=debug)
 print(f"Bot index: {bot.ind}")
-aliens = [Alien(grid) for _ in range(3)]
+aliens = [Alien(grid) for _ in range(30)]
 print("After placing 10 alien")
 print(grid)
 captain_found = False
