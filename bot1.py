@@ -126,6 +126,7 @@ class Grid:
             neighbors = self.get_open_neighbors(ind)
             return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
         else:
+            print("SHOULD NOT HAPPEN")
             #print(f"Has_Alien: {ind}")
             traversed = {}
             children = deque([])
@@ -234,7 +235,7 @@ class Bot1:
         self.captain_ind = captain_ind
         self.ind = random.choice(self.grid.get_open_indices())
         self.grid.place_bot(self.ind)
-        self.path = deque([])
+        self.path = None
         self.debug = debug
 
     def plan_path(self):
@@ -341,7 +342,7 @@ class Bot1:
     #        print(self.grid)
 
     def move(self):
-        if not self.path:
+        if self.path is None:
             self.plan_path()
         if len(self.path) == 0:
             if self.debug:
@@ -478,6 +479,7 @@ class Bot3:
     def move(self):
         self.plan_path(2)
         if len(self.path) == 0:
+            print("REVERT")
             if self.debug:
                 print("Reverting...")
             self.plan_path(1)
@@ -497,8 +499,9 @@ class WorldState:
         self.grid = Grid(debug=self.debug)
     def set_iters(self, iters):
         self.iters = iters
-    def set_K_end(self, K_end):
+    def set_K_end(self, K_end, K_skip):
         self.K_end = K_end
+        self.K_skip = K_skip
     def gen_world(self, K):
         self.captain_ind = random.choice(self.grid.get_open_indices())
         self.aliens = [Alien(self.grid) for _ in range(K)]
@@ -519,9 +522,6 @@ class WorldState:
                 alien.move()
                 if bot.ind == alien.ind:
                     self.bot_caught = True
-                    if self.debug:
-                        print("Failure")
-                    return -2
                     break
             if self.debug:
                 print("Next Iteration")
@@ -531,6 +531,8 @@ class WorldState:
             return 0
             if self.debug:
                 print("Success")
+        elif self.bot_caught:
+            return -2
         else:
             return -1
             if self.debug:
@@ -539,11 +541,11 @@ class WorldState:
 def proc_fun(ws):
     temp_dict = {}
     data_dict = {}
-    for K in range(ws.K_end):
+    for K in range(0, ws.K_end, ws.K_skip):
         for b in range(3):
             temp_dict[(b, K)] = [0, 0]
     for _ in range(ws.iters):
-        for K in range(ws.K_end):
+        for K in range(0, ws.K_end, ws.K_skip):
             ws.gen_grid()
             for b in range(3):
                 print(f"Process({os.getpid()}) Working on iter: {_}, K: {K}, Bot: {b + 1}...")
@@ -559,7 +561,6 @@ def proc_fun(ws):
                 ret = ws.simulate_world(bot)
                 if ret == 0:
                     temp_dict[(b, K)][0] += 1
-                    temp_dict[(b, K)][1] += 1
                 elif ret == -1:
                     temp_dict[(b, K)][1] += 1
                 elif ret == -2:
@@ -568,7 +569,7 @@ def proc_fun(ws):
                     print("Ya fucked up bruv")
     for b in range(3):
         data_dict[b] = [[], []]
-        for K in range(ws.K_end):
+        for K in range(0, ws.K_end, ws.K_skip):
             data_dict[b][0].append(temp_dict[(b, K)][0])
             data_dict[b][1].append(temp_dict[(b, K)][1])
     return data_dict
@@ -589,26 +590,26 @@ class World:
         self.captain_found = False
         self.bot_caught = False
 
-    def gather_data(self, iters=20, K_end=20):
-
+    def gather_data(self, iters=20, K_end=20, K_skip=1):
+        self.K_skip = K_skip
         self.data_dict = {}
         for b in range(3):
-            for K in range(K_end):
+            for K in range(0, K_end, K_skip):
                 self.data_dict[b] = [[], []]
         if self.jobs > 1:
             iters_per_job = iters//self.jobs
             for ws in self.states:
                 ws.set_iters(iters_per_job)
-                ws.set_K_end(K_end)
+                ws.set_K_end(K_end, K_skip)
             p = Pool(self.jobs)
             data = p.map(proc_fun, self.states)
             for b in range(3):
-                for K in range(K_end):
+                for i, K in enumerate(range(0, K_end, K_skip)):
                     successes = 0
                     survivals = 0
                     for job_data in data:
-                        successes += job_data[b][0][K]
-                        survivals += job_data[b][1][K]
+                        successes += job_data[b][0][i]
+                        survivals += job_data[b][1][i]
                     self.data_dict[b][0].append(successes/(self.jobs * iters_per_job))
                     self.data_dict[b][1].append(survivals/(self.jobs * iters_per_job))
             for b in range(3):
@@ -621,11 +622,10 @@ class World:
                 for b in range(3):
                     temp_dict[(b, K)] = [0, 0]
             for _ in range(iters):
-                for K in range(K_end):
+                for K in range(0, K_end, K_skip):
                     self.gen_grid()
                     start_time = time.perf_counter()
                     for b in range(3):
-                        print(f"K={K},Bot {b + 1}, iter={_}")
                         self.grid.reset_grid()
                         self.gen_world(K)
                         bot = None
@@ -636,9 +636,10 @@ class World:
                         else:
                             bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
                         ret = self.simulate_world(bot)
+                        print(f"K={K},Bot {b + 1}, iter={_}, res={ret}")
                         if ret == 0:
                             temp_dict[(b, K)][0] += 1
-                            temp_dict[(b, K)][1] += 1
+                            #temp_dict[(b, K)][1] += 1
                         elif ret == -1:
                             temp_dict[(b, K)][1] += 1
                         elif ret == -2:
@@ -647,7 +648,7 @@ class World:
                             print("Ya fucked up bruv")
                     end_time = time.perf_counter()
             for b in range(3):
-                for K in range(K_end):
+                for K in range(0, K_end, K_skip):
                     self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
                     self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
             for b in range(3):
@@ -658,11 +659,21 @@ class World:
     def plot_data(self):
         K = len(self.data_dict[0][0])
         x = np.arange(K)
+        x = x * self.K_skip
+        plt.subplot(211)
         for b in range(3):
             plt.plot(x, self.data_dict[b][0], label=f"Bot {b + 1} Success")
-            plt.plot(x, self.data_dict[b][1], label=f"Bot { b + 1} Survival")
+        plt.xlabel("No. of Aliens")
+        plt.ylabel("Success Rate")
         plt.legend()
-        plt.ylim(0.001, 1.0)
+        plt.ylim(0.001, 1.2)
+        plt.subplot(212)
+        for b in range(3):
+            plt.plot(x, self.data_dict[b][1], label=f"Bot { b + 1} Survival")
+        plt.xlabel("No. of Aliens")
+        plt.ylabel("Survival Rate")
+        plt.legend()
+        plt.ylim(0.001, max(self.data_dict[2][1])+0.2)
         plt.show()
 
     def simulate_world(self, bot):
@@ -676,13 +687,14 @@ class World:
             for alien in self.aliens:
                 if bot.ind == alien.ind:
                     self.bot_caught = True
+                    if self.debug:
+                        print("Failure")
                     break
                 alien.move()
                 if bot.ind == alien.ind:
                     self.bot_caught = True
                     if self.debug:
                         print("Failure")
-                    return -2
                     break
             if self.debug:
                 print("Next Iteration")
@@ -692,6 +704,8 @@ class World:
             return 0
             if self.debug:
                 print("Success")
+        elif self.bot_caught:
+            return -2
         else:
             return -1
             if self.debug:
@@ -735,5 +749,5 @@ class World:
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=1)
-w.gather_data(iters=50, K_end=100)
+w.gather_data(iters=150, K_end=10, K_skip=2)
 w.plot_data()
