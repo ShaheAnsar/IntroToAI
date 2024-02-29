@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from collections import namedtuple
 from collections import deque
@@ -8,6 +9,7 @@ from time import sleep
 from termcolor import colored
 from matplotlib import pyplot as plt
 import multiprocessing as mp
+from multiprocessing import Pool
 import time
 
 GridPointAttrib = {}
@@ -489,22 +491,94 @@ class Bot3:
         self.grid.place_bot(self.ind)
 
 class WorldState:
-    def __init__(self, K, debug=True):
+    def __init__(self, debug=True):
         self.debug = debug
     def gen_grid(self):
         self.grid = Grid(debug=self.debug)
+    def set_iters(self, iters):
+        self.iters = iters
+    def set_K_end(self, K_end):
+        self.K_end = K_end
     def gen_world(self, K):
         self.captain_ind = random.choice(self.grid.get_open_indices())
         self.aliens = [Alien(self.grid) for _ in range(K)]
         self.captain_found = False
         self.bot_caught = False
+    def simulate_world(self, bot):
+        for _ in range(1000):
+            if self.bot_caught:
+                break
+            bot.move()
+            if bot.ind == self.captain_ind:
+                self.captain_found = True
+                break
+            for alien in self.aliens:
+                if bot.ind == alien.ind:
+                    self.bot_caught = True
+                    break
+                alien.move()
+                if bot.ind == alien.ind:
+                    self.bot_caught = True
+                    if self.debug:
+                        print("Failure")
+                    return -2
+                    break
+            if self.debug:
+                print("Next Iteration")
+                print(self.grid)
+                sleep(0.016)
+        if self.captain_found:
+            return 0
+            if self.debug:
+                print("Success")
+        else:
+            return -1
+            if self.debug:
+                print("Failure")
+
+def proc_fun(ws):
+    temp_dict = {}
+    data_dict = {}
+    for K in range(ws.K_end):
+        for b in range(3):
+            temp_dict[(b, K)] = [0, 0]
+    for _ in range(ws.iters):
+        for K in range(ws.K_end):
+            ws.gen_grid()
+            for b in range(3):
+                print(f"Process({os.getpid()}) Working on iter: {_}, K: {K}, Bot: {b + 1}...")
+                ws.grid.reset_grid()
+                ws.gen_world(K)
+                bot = None
+                if b == 0:
+                    bot = Bot1(ws.grid, ws.captain_ind, debug=ws.debug)
+                elif b == 1:
+                    bot = Bot2(ws.grid, ws.captain_ind, debug=ws.debug)
+                else:
+                    bot = Bot3(ws.grid, ws.captain_ind, debug=ws.debug)
+                ret = ws.simulate_world(bot)
+                if ret == 0:
+                    temp_dict[(b, K)][0] += 1
+                    temp_dict[(b, K)][1] += 1
+                elif ret == -1:
+                    temp_dict[(b, K)][1] += 1
+                elif ret == -2:
+                    pass
+                else:
+                    print("Ya fucked up bruv")
+    for b in range(3):
+        data_dict[b] = [[], []]
+        for K in range(ws.K_end):
+            data_dict[b][0].append(temp_dict[(b, K)][0])
+            data_dict[b][1].append(temp_dict[(b, K)][1])
+    return data_dict
 
 class World:
     def __init__(self, debug=True, track_time = False, jobs=1):
         self.debug = debug
         self.jobs = jobs
         if jobs > 1:
-            self.states = [WorldState(debug) for _ in range(jobs)]
+            self.states = [WorldState(debug=debug) for _ in range(jobs)]
 
     def gen_grid(self):
         self.grid = Grid(debug=self.debug)
@@ -518,56 +592,69 @@ class World:
     def gather_data(self, iters=20, K_end=20):
 
         self.data_dict = {}
-
-        def proc_fun():
-            pass
+        for b in range(3):
+            for K in range(K_end):
+                self.data_dict[b] = [[], []]
         if self.jobs > 1:
-
-            pass
-        
-        temp_dict = {}
-        for K in range(K_end):
+            iters_per_job = iters//self.jobs
+            for ws in self.states:
+                ws.set_iters(iters_per_job)
+                ws.set_K_end(K_end)
+            p = Pool(self.jobs)
+            data = p.map(proc_fun, self.states)
             for b in range(3):
-                temp_dict[(b, K)] = [0, 0]
-        for _ in range(iters):
-            for K in range(K_end):
-                print("Grid Recreate")
-                self.gen_grid()
-                start_time = time.perf_counter()
-                for b in range(3):
-                    print(f"Bot {b + 1}, K: {K}, Iter: {_}")
-                    print("Grid Reset, World Rebuild")
-                    self.grid.reset_grid()
-                    self.gen_world(K)
-                    bot = None
-                    if b == 0:
-                        bot = Bot1(self.grid, self.captain_ind, debug=self.debug)
-                    elif b == 1:
-                        bot = Bot2(self.grid, self.captain_ind, debug=self.debug)
-                    else:
-                        bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
-                    ret = self.simulate_world(bot)
-                    if ret == 0:
-                        temp_dict[(b, K)][0] += 1
-                        temp_dict[(b, K)][1] += 1
-                    elif ret == -1:
-                        temp_dict[(b, K)][1] += 1
-                    elif ret == -2:
-                        pass
-                    else:
-                        print("Ya fucked up bruv")
-                end_time = time.perf_counter()
-                print(f"Time to run: {end_time - start_time}")
-        for b in range(3):
-            self.data_dict[b] = [[], []]
-            for K in range(K_end):
-                self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
-                self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
-        for b in range(3):
-            for i in range(2):
-                self.data_dict[b][1] = np.array(self.data_dict[b][1])
+                for K in range(K_end):
+                    successes = 0
+                    survivals = 0
+                    for job_data in data:
+                        successes += job_data[b][0][K]
+                        survivals += job_data[b][1][K]
+                    self.data_dict[b][0].append(successes/(self.jobs * iters_per_job))
+                    self.data_dict[b][1].append(survivals/(self.jobs * iters_per_job))
+            for b in range(3):
                 self.data_dict[b][0] = np.array(self.data_dict[b][0])
-        print(self.data_dict)
+                self.data_dict[b][1] = np.array(self.data_dict[b][1])
+            print(self.data_dict)
+        else:
+            temp_dict = {}
+            for K in range(K_end):
+                for b in range(3):
+                    temp_dict[(b, K)] = [0, 0]
+            for _ in range(iters):
+                for K in range(K_end):
+                    self.gen_grid()
+                    start_time = time.perf_counter()
+                    for b in range(3):
+                        print(f"K={K},Bot {b + 1}, iter={_}")
+                        self.grid.reset_grid()
+                        self.gen_world(K)
+                        bot = None
+                        if b == 0:
+                            bot = Bot1(self.grid, self.captain_ind, debug=self.debug)
+                        elif b == 1:
+                            bot = Bot2(self.grid, self.captain_ind, debug=self.debug)
+                        else:
+                            bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
+                        ret = self.simulate_world(bot)
+                        if ret == 0:
+                            temp_dict[(b, K)][0] += 1
+                            temp_dict[(b, K)][1] += 1
+                        elif ret == -1:
+                            temp_dict[(b, K)][1] += 1
+                        elif ret == -2:
+                            pass
+                        else:
+                            print("Ya fucked up bruv")
+                    end_time = time.perf_counter()
+            for b in range(3):
+                for K in range(K_end):
+                    self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
+                    self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
+            for b in range(3):
+                for i in range(2):
+                    self.data_dict[b][1] = np.array(self.data_dict[b][1])
+                    self.data_dict[b][0] = np.array(self.data_dict[b][0])
+            print(self.data_dict)
     def plot_data(self):
         K = len(self.data_dict[0][0])
         x = np.arange(K)
@@ -616,7 +703,7 @@ class World:
 #grid.grid[captain_ind[1]][captain_ind[0]]['captain_slot'] = True
 #bot = Bot1(grid, captain_ind, debug=debug)
 #print(f"Bot index: {bot.ind}")
-#aliens = [Alien(grid) for _ in range(30)]
+#aliens = [Alien(grid) for _ in range(100)]
 #print("After placing 10 alien")
 #print(grid)
 #captain_found = False
@@ -647,6 +734,6 @@ class World:
 #else:
 #    print("Failure")
 plt.style.use('ggplot')
-w = World(debug=False)
-w.gather_data(iters=5, K_end=20)
+w = World(debug=False, jobs=1)
+w.gather_data(iters=50, K_end=100)
 w.plot_data()
