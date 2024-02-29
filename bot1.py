@@ -1,12 +1,13 @@
 import numpy as np
 from collections import namedtuple
 from collections import deque
+from collections import defaultdict
 import copy
 import random
 from time import sleep
 from termcolor import colored
 from matplotlib import pyplot as plt
-from multiprocessing import Pool
+import multiprocessing as mp
 import time
 
 GridPointAttrib = {}
@@ -165,6 +166,13 @@ class Grid:
         return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i]['open'] == True and self.grid[j][i]['alien_id'] == -1
                 and self.grid[j][i]['bot_occupied'] == False]
 
+    def reset_grid(self):
+        for j in range(self.D):
+            for i in range(self.D):
+                self.grid[j][i]['alien_id'] = -1
+                self.grid[j][i]['bot_occupied'] = False
+                self.grid[j][i]['captain_slot'] = False
+                self.grid[j][i]['traversed'] = False
 
     def __str__(self):
         s = ""
@@ -479,26 +487,57 @@ class Bot3:
         self.grid.remove_bot(self.ind)
         self.ind = next_dest
         self.grid.place_bot(self.ind)
-class World:
-    def __init__(self, debug=True, track_time = False, concurrent=False):
+
+class WorldState:
+    def __init__(self, K, debug=True):
         self.debug = debug
-    def gen_world(self, K):
+    def gen_grid(self):
         self.grid = Grid(debug=self.debug)
+    def gen_world(self, K):
+        self.captain_ind = random.choice(self.grid.get_open_indices())
+        self.aliens = [Alien(self.grid) for _ in range(K)]
+        self.captain_found = False
+        self.bot_caught = False
+
+class World:
+    def __init__(self, debug=True, track_time = False, jobs=1):
+        self.debug = debug
+        self.jobs = jobs
+        if jobs > 1:
+            self.states = [WorldState(debug) for _ in range(jobs)]
+
+    def gen_grid(self):
+        self.grid = Grid(debug=self.debug)
+
+    def gen_world(self, K):
         self.captain_ind = random.choice(self.grid.get_open_indices())
         self.aliens = [Alien(self.grid) for _ in range(K)]
         self.captain_found = False
         self.bot_caught = False
 
     def gather_data(self, iters=20, K_end=20):
+
         self.data_dict = {}
-        for b in range(3):
-            self.data_dict[b] = [[], []]
+
+        def proc_fun():
+            pass
+        if self.jobs > 1:
+
+            pass
+        
+        temp_dict = {}
+        for K in range(K_end):
+            for b in range(3):
+                temp_dict[(b, K)] = [0, 0]
+        for _ in range(iters):
             for K in range(K_end):
-                print(f"Bot {b + 1}, K: {K}")
+                print("Grid Recreate")
+                self.gen_grid()
                 start_time = time.perf_counter()
-                successes = 0
-                survivals = 0
-                for _ in range(iters):
+                for b in range(3):
+                    print(f"Bot {b + 1}, K: {K}, Iter: {_}")
+                    print("Grid Reset, World Rebuild")
+                    self.grid.reset_grid()
                     self.gen_world(K)
                     bot = None
                     if b == 0:
@@ -509,20 +548,21 @@ class World:
                         bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
                     ret = self.simulate_world(bot)
                     if ret == 0:
-                        successes += 1
-                        survivals += 1
+                        temp_dict[(b, K)][0] += 1
+                        temp_dict[(b, K)][1] += 1
                     elif ret == -1:
-                        survivals += 1
+                        temp_dict[(b, K)][1] += 1
                     elif ret == -2:
                         pass
                     else:
                         print("Ya fucked up bruv")
                 end_time = time.perf_counter()
                 print(f"Time to run: {end_time - start_time}")
-                success_rate = successes/iters
-                survival_rate = survivals/iters
-                self.data_dict[b][0].append(success_rate)
-                self.data_dict[b][1].append(survival_rate)
+        for b in range(3):
+            self.data_dict[b] = [[], []]
+            for K in range(K_end):
+                self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
+                self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
         for b in range(3):
             for i in range(2):
                 self.data_dict[b][1] = np.array(self.data_dict[b][1])
@@ -608,5 +648,5 @@ class World:
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False)
-w.gather_data(iters=20, K_end=5)
+w.gather_data(iters=5, K_end=20)
 w.plot_data()
