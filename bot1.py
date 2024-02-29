@@ -492,6 +492,141 @@ class Bot3:
         self.ind = next_dest
         self.grid.place_bot(self.ind)
 
+class Bot4:
+    def __init__(self, grid, captain_ind, debug = True):
+        self.grid = grid
+        self.captain_ind = captain_ind
+        self.ind = random.choice(self.grid.get_open_indices())
+        self.grid.place_bot(self.ind)
+        self.path = deque([])
+        self.debug = debug
+        self.risk_factor = 0.0
+
+    def plan_path(self, k=2):
+        if self.debug:
+            print("Planning Path...")  # If path is empty we plan one
+        self.path = deque([])
+        self.grid.remove_all_traversal()
+        captain_found = False
+        path_tree = PathTreeNode()
+        path_tree.data = self.ind
+        path_deque = deque([path_tree])
+        destination = None
+        while not captain_found:
+            if len(path_deque) == 0:
+                self.grid.remove_all_traversal()
+                #raise RuntimeError("No Path Found!!!")
+                return
+            node = path_deque.popleft()
+            ind = node.data
+            self.grid.set_traversed(ind)
+            if ind == self.captain_ind:
+                destination = node
+                break
+            neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
+            for neighbor_ind in neighbors_ind:
+                # Add all possible paths that do not hit an alien
+                if not self.grid.has_alien(neighbor_ind, k = k):
+                    new_node = PathTreeNode()
+                    new_node.data = neighbor_ind
+                    new_node.parent = node
+                    node.children.append(new_node)
+            path_deque.extend(node.children)
+        self.grid.remove_all_traversal()
+        if self.debug:
+            print("Planning Done!")
+        reverse_path = []
+        node = destination
+        while node.parent is not None:
+            reverse_path.append(node.data)
+            node = node.parent
+        self.path.extend(reversed(reverse_path))
+        for ind in self.path:
+            self.grid.set_traversed(ind)
+        if self.debug:
+            print("Planned Path")
+            print(self.grid)
+    def distance(self, ind):
+        return (ind[1] - self.ind[1])**2 + (ind[0] - self.ind[0])**2
+    def evade(self, offset = 2):
+        # From the current position
+        # Search +/- offset for aliens
+        # Evade in a way that escapes the closest alien
+        x_offsets = [i for i in range(-offset, offset + 1)]
+        y_offsets = [i for i in range(-offset, offset + 1)]
+        aliens = []
+        for j in y_offsets:
+            for i in x_offsets:
+                if i == 0 and j == 0:
+                    continue
+                ind = (self.ind[0] + i, self.ind[1] + j)
+                if self.grid.valid_index(ind) and self.grid.has_alien(ind):
+                    aliens.append((self.ind[0] + i, self.ind[1] + j))
+        if not aliens:
+            # If there are no aliens nearby just wait
+            return
+        aliens.sort(key=self.distance)
+        closest_alien = aliens[0]
+        ideal_move_dir = (self.ind[0] - closest_alien[0], self.ind[1] - closest_alien[1])
+        def condition_dir(d):
+            if d == 0:
+                return 0
+            elif d > 0:
+                return 1
+            elif d < 0:
+                return -1
+        if ideal_move_dir[0] == ideal_move_dir[1] or abs(ideal_move_dir[0]) > abs(ideal_move_dir[1]):
+            new_ind = (self.ind[0] + condition_dir(ideal_move_dir[0]), self.ind[1])
+            if self.grid.valid_index(new_ind) and self.grid.grid[new_ind[1]][new_ind[0]]['open']:
+                self.grid.remove_bot(self.ind)
+                self.ind = new_ind
+                self.grid.place_bot(self.ind)
+            else:
+                return -1
+        else:
+            new_ind = (self.ind[0], self.ind[1] + condition_dir(ideal_move_dir[1]))
+            if self.grid.valid_index(new_ind) and self.grid.grid[new_ind[1]][new_ind[0]]['open']:
+                self.grid.remove_bot(self.ind)
+                self.ind = new_ind
+                self.grid.place_bot(self.ind)
+            else:
+                return -1
+
+        return 0
+
+
+    def move(self):
+        self.plan_path(2)
+        if len(self.path) == 0:
+            # The closer the captain is the higher the risk
+            # I will scale it such that if the captain is under 3 units, (rf = 0.8)
+            # the bot should take high risk
+            # If far away(> 10), it should focus more on evading (rf = 0.2)
+            # We use a linear model
+            d = self.distance(self.captain_ind)
+            # 0.01 because if risk_factor is 0 I want to only evade
+            c = random.uniform(0.01, 1.0)
+            m = -0.086
+            c = 1.06
+            self.risk_factor = m * d + c
+            if(c > self.risk_factor):
+                self.evade()
+            else:
+                print("REVERT")
+                if self.debug:
+                    print("Reverting...")
+                self.plan_path(1)
+                if len(self.path) == 0:
+                    if self.debug:
+                        print("No path found")
+                    return
+            return
+
+        next_dest = self.path.popleft()
+        self.grid.remove_bot(self.ind)
+        self.ind = next_dest
+        self.grid.place_bot(self.ind)
+
 class WorldState:
     def __init__(self, debug=True):
         self.debug = debug
@@ -555,9 +690,9 @@ def proc_fun(ws):
                 if b == 0:
                     bot = Bot1(ws.grid, ws.captain_ind, debug=ws.debug)
                 elif b == 1:
-                    bot = Bot2(ws.grid, ws.captain_ind, debug=ws.debug)
-                else:
                     bot = Bot3(ws.grid, ws.captain_ind, debug=ws.debug)
+                else:
+                    bot = Bot4(ws.grid, ws.captain_ind, debug=ws.debug)
                 ret = ws.simulate_world(bot)
                 if ret == 0:
                     temp_dict[(b, K)][0] += 1
@@ -632,9 +767,9 @@ class World:
                         if b == 0:
                             bot = Bot1(self.grid, self.captain_ind, debug=self.debug)
                         elif b == 1:
-                            bot = Bot2(self.grid, self.captain_ind, debug=self.debug)
-                        else:
                             bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
+                        else:
+                            bot = Bot4(self.grid, self.captain_ind, debug=self.debug)
                         ret = self.simulate_world(bot)
                         print(f"K={K},Bot {b + 1}, iter={_}, res={ret}")
                         if ret == 0:
@@ -673,7 +808,7 @@ class World:
         plt.xlabel("No. of Aliens")
         plt.ylabel("Survival Rate")
         plt.legend()
-        plt.ylim(0.001, max(self.data_dict[2][1])+0.2)
+        plt.ylim(0.001, max(self.data_dict[2][1])*1.2)
         plt.show()
 
     def simulate_world(self, bot):
@@ -715,7 +850,7 @@ class World:
 #grid = Grid(debug=debug)
 #captain_ind = random.choice(grid.get_open_indices())
 #grid.grid[captain_ind[1]][captain_ind[0]]['captain_slot'] = True
-#bot = Bot1(grid, captain_ind, debug=debug)
+#bot = Bot4(grid, captain_ind, debug=debug)
 #print(f"Bot index: {bot.ind}")
 #aliens = [Alien(grid) for _ in range(100)]
 #print("After placing 10 alien")
@@ -748,6 +883,6 @@ class World:
 #else:
 #    print("Failure")
 plt.style.use('ggplot')
-w = World(debug=False, jobs=1)
-w.gather_data(iters=150, K_end=10, K_skip=2)
+w = World(debug=False, jobs=3)
+w.gather_data(iters=100, K_end=100, K_skip=15)
 w.plot_data()
