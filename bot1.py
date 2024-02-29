@@ -228,6 +228,7 @@ class Bot1:
         self.debug = debug
 
     def plan_path(self):
+        self.path = deque([])
         if self.debug:
             print("Planning Path...")  # If path is empty we plan one
         self.grid.remove_all_traversal()
