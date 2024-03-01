@@ -14,6 +14,8 @@ import time
 
 GridPointAttrib = {}
 
+NUM_BOTS=4
+
 class Grid:
     def __init__(self, D=30, debug=True):
         self.D = D
@@ -122,9 +124,16 @@ class Grid:
         if k == 1:
             return self.grid[ind[1]][ind[0]]['alien_id'] != -1
         elif k==2:
-            ret = self.grid[ind[1]][ind[0]]['alien_id'] != -1
+            depth1 = self.grid[ind[1]][ind[0]]['alien_id'] != -1
+            if depth1:
+                return True
             neighbors = self.get_open_neighbors(ind)
-            return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
+            for n in neighbors:
+                if self.has_alien(n):
+                    return True
+            return False
+
+            #return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
         else:
             print("SHOULD NOT HAPPEN")
             #print(f"Has_Alien: {ind}")
@@ -238,108 +247,108 @@ class Bot1:
         self.path = None
         self.debug = debug
 
-    def plan_path(self):
-        self.path = deque([])
-        if self.debug:
-            print("Planning Path...")  # If path is empty we plan one
-        self.grid.remove_all_traversal()
-        captain_found = False
-        path_tree = PathTreeNode()
-        path_tree.data = self.ind
-        #path_deque = deque([path_tree])
-        path_deque = deque([self.ind])
-        path_map = {self.ind: None}
-        visited = set()
-        destination = None
-        while not captain_found:
-            if len(path_deque) == 0:
-                #raise RuntimeError("No Path Found!!!")
-                return
-            #node = path_deque.popleft()
-            #ind = node.data
-            ind = path_deque.popleft()
-            visited.add(ind)
-            if self.debug:
-                print(f"Current Node: {ind}")
-            #self.grid.set_traversed(ind)
-            if ind == self.captain_ind:
-                destination = ind
-                break
-            neighbors_ind = self.grid.get_open_neighbors(ind)
-            neighbors_ind = [i for i in neighbors_ind if i not in visited]
-            for neighbor_ind in neighbors_ind:
-                # Add all possible paths that do not hit an alien
-                if not self.grid.has_alien(neighbor_ind):
-                    path_deque.append(neighbor_ind)
-                    path_map[neighbor_ind] = ind
-                    #new_node = PathTreeNode()
-                    #new_node.data = neighbor_ind
-                    #new_node.parent = node
-                    #node.children.append(new_node)
-
-            #path_deque.extend(node.children)
-        #self.grid.remove_all_traversal()
-        if self.debug:
-            print("Planning Done!")
-        reverse_path = []
-        next_ind = destination
-        while next_ind is not None:
-            reverse_path.append(next_ind)
-            next_ind = path_map[next_ind]
-        #node = destination
-        #while node.parent is not None:
-        #    reverse_path.append(node.data)
-        #    node = node.parent
-        self.path.extend(reversed(reverse_path))
-        for ind in self.path:
-            self.grid.set_traversed(ind)
-        if self.debug:
-            print("Planned Path")
-            print(self.grid)
     #def plan_path(self):
+    #    self.path = deque([])
     #    if self.debug:
     #        print("Planning Path...")  # If path is empty we plan one
-    #    self.path = deque([])
     #    self.grid.remove_all_traversal()
     #    captain_found = False
     #    path_tree = PathTreeNode()
     #    path_tree.data = self.ind
-    #    path_deque = deque([path_tree])
+    #    #path_deque = deque([path_tree])
+    #    path_deque = deque([self.ind])
+    #    path_map = {self.ind: None}
+    #    visited = set()
     #    destination = None
     #    while not captain_found:
     #        if len(path_deque) == 0:
-    #            self.grid.remove_all_traversal()
     #            #raise RuntimeError("No Path Found!!!")
     #            return
-    #        node = path_deque.popleft()
-    #        ind = node.data
-    #        self.grid.set_traversed(ind)
+    #        #node = path_deque.popleft()
+    #        #ind = node.data
+    #        ind = path_deque.popleft()
+    #        visited.add(ind)
+    #        if self.debug:
+    #            print(f"Current Node: {ind}")
+    #        #self.grid.set_traversed(ind)
     #        if ind == self.captain_ind:
-    #            destination = node
+    #            destination = ind
     #            break
-    #        neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
+    #        neighbors_ind = self.grid.get_open_neighbors(ind)
+    #        neighbors_ind = [i for i in neighbors_ind if i not in visited]
     #        for neighbor_ind in neighbors_ind:
     #            # Add all possible paths that do not hit an alien
     #            if not self.grid.has_alien(neighbor_ind):
-    #                new_node = PathTreeNode()
-    #                new_node.data = neighbor_ind
-    #                new_node.parent = node
-    #                node.children.append(new_node)
-    #        path_deque.extend(node.children)
-    #    self.grid.remove_all_traversal()
+    #                path_deque.append(neighbor_ind)
+    #                path_map[neighbor_ind] = ind
+    #                #new_node = PathTreeNode()
+    #                #new_node.data = neighbor_ind
+    #                #new_node.parent = node
+    #                #node.children.append(new_node)
+
+    #        #path_deque.extend(node.children)
+    #    #self.grid.remove_all_traversal()
     #    if self.debug:
     #        print("Planning Done!")
     #    reverse_path = []
-    #    node = destination
-    #    while node.parent is not None:
-    #        reverse_path.append(node.data)
-    #        node = node.parent
+    #    next_ind = destination
+    #    while next_ind is not None:
+    #        reverse_path.append(next_ind)
+    #        next_ind = path_map[next_ind]
+    #    #node = destination
+    #    #while node.parent is not None:
+    #    #    reverse_path.append(node.data)
+    #    #    node = node.parent
     #    self.path.extend(reversed(reverse_path))
     #    for ind in self.path:
     #        self.grid.set_traversed(ind)
     #    if self.debug:
     #        print("Planned Path")
     #        print(self.grid)
+    def plan_path(self):
+        if self.debug:
+            print("Planning Path...")  # If path is empty we plan one
+        self.path = deque([])
+        self.grid.remove_all_traversal()
+        captain_found = False
+        path_tree = PathTreeNode()
+        path_tree.data = self.ind
+        path_deque = deque([path_tree])
+        destination = None
+        while not captain_found:
+            if len(path_deque) == 0:
+                self.grid.remove_all_traversal()
+                #raise RuntimeError("No Path Found!!!")
+                return
+            node = path_deque.popleft()
+            ind = node.data
+            self.grid.set_traversed(ind)
+            if ind == self.captain_ind:
+                destination = node
+                break
+            neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
+            for neighbor_ind in neighbors_ind:
+                # Add all possible paths that do not hit an alien
+                if not self.grid.has_alien(neighbor_ind):
+                    new_node = PathTreeNode()
+                    new_node.data = neighbor_ind
+                    new_node.parent = node
+                    node.children.append(new_node)
+            path_deque.extend(node.children)
+        self.grid.remove_all_traversal()
+        if self.debug:
+            print("Planning Done!")
+        reverse_path = []
+        node = destination
+        while node.parent is not None:
+            reverse_path.append(node.data)
+            node = node.parent
+        self.path.extend(reversed(reverse_path))
+        for ind in self.path:
+            self.grid.set_traversed(ind)
+        if self.debug:
+            print("Planned Path")
+            print(self.grid)
 
     def move(self):
         if self.path is None:
@@ -605,12 +614,18 @@ class Bot4:
             # We use a linear model
             d = self.distance(self.captain_ind)
             # 0.01 because if risk_factor is 0 I want to only evade
-            c = random.uniform(0.01, 1.0)
+            alpha = random.uniform(0.01, 1.0)
             m = -0.086
             c = 1.06
             self.risk_factor = m * d + c
-            if(c > self.risk_factor):
+            if self.risk_factor > 1:
+                self.risk_factor = 1
+            elif self.risk_factor < 0:
+                self.risk_factor = 0
+            #self.risk_factor = 1.0
+            if(alpha > self.risk_factor):
                 self.evade()
+                return
             else:
                 print("REVERT")
                 if self.debug:
@@ -620,7 +635,6 @@ class Bot4:
                     if self.debug:
                         print("No path found")
                     return
-            return
 
         next_dest = self.path.popleft()
         self.grid.remove_bot(self.ind)
@@ -677,12 +691,12 @@ def proc_fun(ws):
     temp_dict = {}
     data_dict = {}
     for K in range(0, ws.K_end, ws.K_skip):
-        for b in range(3):
+        for b in range(NUM_BOTS):
             temp_dict[(b, K)] = [0, 0]
     for _ in range(ws.iters):
         for K in range(0, ws.K_end, ws.K_skip):
             ws.gen_grid()
-            for b in range(3):
+            for b in range(NUM_BOTS):
                 print(f"Process({os.getpid()}) Working on iter: {_}, K: {K}, Bot: {b + 1}...")
                 ws.grid.reset_grid()
                 ws.gen_world(K)
@@ -690,6 +704,8 @@ def proc_fun(ws):
                 if b == 0:
                     bot = Bot1(ws.grid, ws.captain_ind, debug=ws.debug)
                 elif b == 1:
+                    bot = Bot2(ws.grid, ws.captain_ind, debug=ws.debug)
+                elif b == 2:
                     bot = Bot3(ws.grid, ws.captain_ind, debug=ws.debug)
                 else:
                     bot = Bot4(ws.grid, ws.captain_ind, debug=ws.debug)
@@ -702,7 +718,7 @@ def proc_fun(ws):
                     pass
                 else:
                     print("Ya fucked up bruv")
-    for b in range(3):
+    for b in range(NUM_BOTS):
         data_dict[b] = [[], []]
         for K in range(0, ws.K_end, ws.K_skip):
             data_dict[b][0].append(temp_dict[(b, K)][0])
@@ -728,7 +744,7 @@ class World:
     def gather_data(self, iters=20, K_end=20, K_skip=1):
         self.K_skip = K_skip
         self.data_dict = {}
-        for b in range(3):
+        for b in range(NUM_BOTS):
             for K in range(0, K_end, K_skip):
                 self.data_dict[b] = [[], []]
         if self.jobs > 1:
@@ -738,7 +754,7 @@ class World:
                 ws.set_K_end(K_end, K_skip)
             p = Pool(self.jobs)
             data = p.map(proc_fun, self.states)
-            for b in range(3):
+            for b in range(NUM_BOTS):
                 for i, K in enumerate(range(0, K_end, K_skip)):
                     successes = 0
                     survivals = 0
@@ -747,26 +763,28 @@ class World:
                         survivals += job_data[b][1][i]
                     self.data_dict[b][0].append(successes/(self.jobs * iters_per_job))
                     self.data_dict[b][1].append(survivals/(self.jobs * iters_per_job))
-            for b in range(3):
+            for b in range(NUM_BOTS):
                 self.data_dict[b][0] = np.array(self.data_dict[b][0])
                 self.data_dict[b][1] = np.array(self.data_dict[b][1])
             print(self.data_dict)
         else:
             temp_dict = {}
-            for K in range(K_end):
-                for b in range(3):
+            for K in range(0, K_end, K_skip):
+                for b in range(NUM_BOTS):
                     temp_dict[(b, K)] = [0, 0]
             for _ in range(iters):
                 for K in range(0, K_end, K_skip):
                     self.gen_grid()
                     start_time = time.perf_counter()
-                    for b in range(3):
+                    for b in range(NUM_BOTS):
                         self.grid.reset_grid()
                         self.gen_world(K)
                         bot = None
                         if b == 0:
                             bot = Bot1(self.grid, self.captain_ind, debug=self.debug)
                         elif b == 1:
+                            bot = Bot2(self.grid, self.captain_ind, debug=self.debug)
+                        elif b == 2:
                             bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
                         else:
                             bot = Bot4(self.grid, self.captain_ind, debug=self.debug)
@@ -782,33 +800,34 @@ class World:
                         else:
                             print("Ya fucked up bruv")
                     end_time = time.perf_counter()
-            for b in range(3):
+            for b in range(NUM_BOTS):
                 for K in range(0, K_end, K_skip):
                     self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
                     self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
-            for b in range(3):
+            for b in range(NUM_BOTS):
                 for i in range(2):
                     self.data_dict[b][1] = np.array(self.data_dict[b][1])
                     self.data_dict[b][0] = np.array(self.data_dict[b][0])
+            print(temp_dict)
             print(self.data_dict)
     def plot_data(self):
         K = len(self.data_dict[0][0])
         x = np.arange(K)
         x = x * self.K_skip
         plt.subplot(211)
-        for b in range(3):
+        for b in range(NUM_BOTS):
             plt.plot(x, self.data_dict[b][0], label=f"Bot {b + 1} Success")
         plt.xlabel("No. of Aliens")
         plt.ylabel("Success Rate")
         plt.legend()
         plt.ylim(0.001, 1.2)
         plt.subplot(212)
-        for b in range(3):
+        for b in range(NUM_BOTS):
             plt.plot(x, self.data_dict[b][1], label=f"Bot { b + 1} Survival")
         plt.xlabel("No. of Aliens")
         plt.ylabel("Survival Rate")
         plt.legend()
-        plt.ylim(0.001, max(self.data_dict[2][1])*1.2)
+        plt.ylim(0.001, 0.1)
         plt.show()
 
     def simulate_world(self, bot):
@@ -845,6 +864,38 @@ class World:
             return -1
             if self.debug:
                 print("Failure")
+def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
+    print("Doing a worse case BFS")
+    grid = Grid(debug=False)
+    for j in range(grid.D):
+        for i in range(grid.D):
+            grid.grid[j][i]['open']
+    ind = (0, 0)
+    start_time = time.perf_counter()
+    for _ in range(1000):
+        print(f"Iter: {_}")
+        visited = set()
+        parent_map = {ind : None}
+        fringe = deque([ind])
+        while True:
+            if len(fringe) == 0:
+                break
+            ind = fringe.popleft()
+            if ind in visited:
+                print("ERROR")
+            print(ind)
+            visited.add(ind)
+            neighbors = grid.get_open_neighbors(ind)
+            neighbors = [n for n in neighbors if n not in visited]
+            for n in neighbors:
+                if n in visited:
+                    print("ERROR")
+                parent_map[n] = ind
+            const_func(ind)
+            fringe.extend(neighbors)
+    end_time = time.perf_counter()
+    print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
+
 
 #debug = False
 #grid = Grid(debug=debug)
@@ -882,7 +933,8 @@ class World:
 #    print("Success")
 #else:
 #    print("Failure")
-plt.style.use('ggplot')
-w = World(debug=False, jobs=3)
-w.gather_data(iters=100, K_end=100, K_skip=15)
-w.plot_data()
+#plt.style.use('ggplot')
+#w = World(debug=False, jobs=1)
+#w.gather_data(iters=20, K_end=150, K_skip=20)
+#w.plot_data()
+sim_worst_case_bfs()
