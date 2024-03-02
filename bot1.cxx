@@ -56,14 +56,23 @@ struct Grid{
 		return ret;
 	}
 
+	void open_cell(int x, int y) {
+		grid[x + D*y].open = 1;
+	}
+
 	void gen_grid_iterate() {
 		std::vector<std::array<int, 2>> cells_to_open;
 		for(int j = 0; j < D; j++) {
 			for(int i = 0; i < D; i++) {
-
+				g = get(i, j);
+				if(g->open) {
+				}
 			}
 		}
 	}
+
+
+
 	void gen_grid() {
 		// Create the backbone of the grid
 		GridAttrib init_attrib = GridAttrib{
@@ -76,8 +85,10 @@ struct Grid{
 		}
 		//Randomly open a cell
 		std::array<int, 2> rand_ind = {std::rand() % D, std::rand() % D};
-		GridAttrib* g = get(rand_ind[0], rand_ind[1]);
-		g->open = 1;
+		//GridAttrib* g = get(rand_ind[0], rand_ind[1]);
+		//g->open = 1;
+		open_cell(rand_ind[0], rand_ind[1]);
+
 
 	}
 };

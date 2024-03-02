@@ -12,8 +12,13 @@ import multiprocessing as mp
 from multiprocessing import Pool
 import time
 
-GridPointAttrib = {}
+#GridPointAttrib = {}
 
+
+
+
+
+# Total number of Bot Types
 NUM_BOTS=4
 
 class Grid:
@@ -51,6 +56,7 @@ class Grid:
                 neighbors.append(index)
         return neighbors
 
+    # Gets only the unvisited open neighbors. Used mainly for path planning.
     def get_untraversed_open_neighbors(self, ind):
         neighbors = []
         left = (ind[0] - 1, ind[1])
@@ -62,9 +68,11 @@ class Grid:
             if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
                 neighbors.append(index)
         return neighbors
-
+    
+    # The steps to be iterated over and over till they cannot be done are implemented here
     def gen_grid_iterate(self):
         cells_to_open = []
+        # Get all blocked cells with one open neighbors
         for j in range(self.D):
             for i in range(self.D):
                 if self.grid[j][i]['open'] == True:
@@ -76,6 +84,7 @@ class Grid:
                         open_neighbors.append(neighbor_ind)
                 if len(open_neighbors) == 1:
                     cells_to_open.append((i, j))
+        # Randomly open one of those cells
         if len(cells_to_open) > 0:
             index = random.choice(cells_to_open)
             self.grid[index[1]][index[0]]['open'] = True
@@ -85,28 +94,34 @@ class Grid:
             print(f"Cells to open: {len(cells_to_open)}")
         return len(cells_to_open) != 0
 
+    # Grid generation happens here
     def gen_grid(self):
         for j in range(self.D):
             row = []
             for i in range(self.D):
+                # Honestly not the best way to do this
+                # I regretted this later down the road
+                # Every cell has its own attributes that
+                # I use to keep track of everything
                 row.append({'open': False, 'traversed' : False, 'captain_slot': False, 'alien_id' : -1, 'bot_occupied': False})
             self.grid.append(row)
+
         # Open Random Cell
         rand_ind = np.random.randint(0, self.D, 2)
         self.grid[rand_ind[1]][rand_ind[0]]['open'] = True
-        # Go through all cells in the grid 
-        # Any cell with one open neigbor, add the index to 
-        # And then select one at random
         if self.debug:
             print(self)
+        # Iterate on the grid
         while self.gen_grid_iterate():
             pass
+        # Randomly open half the dead ends
         cells_to_open = []
         for j in range(self.D):
             for i in range(self.D):
                     all_neighbors = self.get_neighbors((i,j))
                     open_neighbors = [ind for ind in all_neighbors if self.grid[ind[1]][ind[0]]['open']]
                     closed_neighbors = [ind for ind in all_neighbors if not self.grid[ind[1]][ind[0]]['open']]
+                    # randint is used here to maintain a ~50% chance of any dead end opening
                     if self.grid[j][i]['open'] and random.randint(0, 1) == 1 and len(open_neighbors) == 1:
                         cells_to_open.append(random.choice(closed_neighbors))
         for ind in cells_to_open:
@@ -114,6 +129,8 @@ class Grid:
         if self.debug:
             print("After dead end opening")
             print(self)
+
+    # A bunch of simple helper functions
 
     def place_alien(self, ind, alien_id):
         self.grid[ind[1]][ind[0]]['alien_id'] = alien_id
@@ -135,6 +152,8 @@ class Grid:
 
             #return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
         else:
+            # This was implemented in case k >= 3 was needed.
+            # It was not needed
             print("SHOULD NOT HAPPEN")
             #print(f"Has_Alien: {ind}")
             traversed = {}
@@ -177,7 +196,11 @@ class Grid:
     def get_unoccupied_open_indices(self):
         return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i]['open'] == True and self.grid[j][i]['alien_id'] == -1
                 and self.grid[j][i]['bot_occupied'] == False]
+    # End of all helper functions
 
+    # A function to reset grid
+    # Used to speed up data gathering since
+    # it allows me to use the same grid for all bots
     def reset_grid(self):
         for j in range(self.D):
             for i in range(self.D):
@@ -207,6 +230,7 @@ class Grid:
         return s
 
 class Alien:
+    # This alien_id is used to keep track of every alien
     alien_id = 0
     aliens_ind = []
     def __init__(self, grid):
@@ -221,15 +245,18 @@ class Alien:
         #print(ind)
 
     def move(self):
+        # Get all possible locations for the alien
         neighbors = self.grid.get_open_neighbors(self.ind)
+        # Filter out the ones that are occupied by other aliens
         neighbors_without_aliens = [neighbor for neighbor in neighbors if self.grid.grid[neighbor[1]][neighbor[0]]['alien_id'] == -1]
+        # Randomly choose any of the locations
         if len(neighbors_without_aliens) > 0:
             rand_ind = np.random.randint(0, len( neighbors_without_aliens ))
             self.grid.remove_alien(self.ind)
             self.ind = neighbors_without_aliens[rand_ind]
             self.grid.place_alien(self.ind, self.alien_id)
 
-
+# Used for parent tracking with BFS
 class PathTreeNode:
     def __init__(self):
         self.children = []
@@ -509,7 +536,7 @@ class Bot4:
         self.grid.place_bot(self.ind)
         self.path = deque([])
         self.debug = debug
-        self.risk_factor = 0.0
+        self.risk_limit = 0.0
 
     def plan_path(self, k=2):
         if self.debug:
@@ -603,6 +630,35 @@ class Bot4:
 
         return 0
 
+    # Calculates a danger level so that we can
+    # evade in the direction that lets us be in
+    # the safest possible position
+    def calculate_danger(self, ind, offset):
+        danger = 0
+        for j in range(-offset, offset):
+            for i in range(-offset, offset):
+                x = ind[0] + i
+                y = ind[1] + j
+                if self.grid.valid_index((x, y)) and self.grid.has_alien((x, y)):
+                    # The closer the more dangerous. The 0.001 at the end is to avoid div by 0
+                    danger += 1/(abs(i) + abs(j) + 0.001)
+        return danger
+
+    def evade2(self, offset=2):
+        possible_positions = self.grid.get_open_neighbors(self.ind)
+        # The current position might be the safest.
+        # We may not want to move in that case so we
+        # add it to the possible positions
+        possible_positions.append(self.ind)
+        dangers = [self.calculate_danger(p, offset) for p in possible_positions]
+        print(dangers)
+        min_position_i = min(enumerate(dangers), key=lambda x: x[1])[0]
+        next_position = possible_positions[min_position_i]
+        print(f"Chosen Danger: {dangers[min_position_i]}")
+        print(f"Chosen Direction: {next_position[0] - self.ind[0]}, {next_position[1] - self.ind[1]}")
+        self.grid.remove_bot(self.ind)
+        self.ind = next_position
+        self.grid.place_bot(self.ind)
 
     def move(self):
         self.plan_path(2)
@@ -613,18 +669,18 @@ class Bot4:
             # If far away(> 10), it should focus more on evading (rf = 0.2)
             # We use a linear model
             d = self.distance(self.captain_ind)
-            # 0.01 because if risk_factor is 0 I want to only evade
+            # 0.01 because if risk_limit is 0 I want to only evade
             alpha = random.uniform(0.01, 1.0)
             m = -0.086
             c = 1.06
-            self.risk_factor = m * d + c
-            if self.risk_factor > 1:
-                self.risk_factor = 1
-            elif self.risk_factor < 0:
-                self.risk_factor = 0
-            #self.risk_factor = 1.0
-            if(alpha > self.risk_factor):
-                self.evade()
+            self.risk_limit = m * d + c
+            if self.risk_limit > 1:
+                self.risk_limit = 1
+            elif self.risk_limit < 0:
+                self.risk_limit = 0
+            #self.risk_limit = 1.0
+            if(alpha > self.risk_limit):
+                self.evade2()
                 return
             else:
                 print("REVERT")
@@ -648,7 +704,8 @@ class WorldState:
         self.grid = Grid(debug=self.debug)
     def set_iters(self, iters):
         self.iters = iters
-    def set_K_end(self, K_end, K_skip):
+    def set_K_range(self, K_start, K_end, K_skip):
+        self.K_start = K_start
         self.K_end = K_end
         self.K_skip = K_skip
     def gen_world(self, K):
@@ -690,11 +747,11 @@ class WorldState:
 def proc_fun(ws):
     temp_dict = {}
     data_dict = {}
-    for K in range(0, ws.K_end, ws.K_skip):
+    for K in range(ws.K_start, ws.K_end, ws.K_skip):
         for b in range(NUM_BOTS):
             temp_dict[(b, K)] = [0, 0]
     for _ in range(ws.iters):
-        for K in range(0, ws.K_end, ws.K_skip):
+        for K in range(ws.K_start, ws.K_end, ws.K_skip):
             ws.gen_grid()
             for b in range(NUM_BOTS):
                 print(f"Process({os.getpid()}) Working on iter: {_}, K: {K}, Bot: {b + 1}...")
@@ -720,7 +777,7 @@ def proc_fun(ws):
                     print("Ya fucked up bruv")
     for b in range(NUM_BOTS):
         data_dict[b] = [[], []]
-        for K in range(0, ws.K_end, ws.K_skip):
+        for K in range(ws.K_start, ws.K_end, ws.K_skip):
             data_dict[b][0].append(temp_dict[(b, K)][0])
             data_dict[b][1].append(temp_dict[(b, K)][1])
     return data_dict
@@ -741,21 +798,27 @@ class World:
         self.captain_found = False
         self.bot_caught = False
 
-    def gather_data(self, iters=20, K_end=20, K_skip=1):
+    def gather_data(self, iters=20, K_range=(0, 20, 1)):
+        K_start = K_range[0]
+        K_end = K_range[1]
+        K_skip = K_range[2]
+        self.K_start = K_range[0]
+        self.K_end = K_range[1]
+        self.K_skip = K_range[2]
         self.K_skip = K_skip
         self.data_dict = {}
         for b in range(NUM_BOTS):
-            for K in range(0, K_end, K_skip):
+            for K in range(K_start, K_end, K_skip):
                 self.data_dict[b] = [[], []]
         if self.jobs > 1:
             iters_per_job = iters//self.jobs
             for ws in self.states:
                 ws.set_iters(iters_per_job)
-                ws.set_K_end(K_end, K_skip)
+                ws.set_K_range(K_start, K_end, K_skip)
             p = Pool(self.jobs)
             data = p.map(proc_fun, self.states)
             for b in range(NUM_BOTS):
-                for i, K in enumerate(range(0, K_end, K_skip)):
+                for i, K in enumerate(range(K_start, K_end, K_skip)):
                     successes = 0
                     survivals = 0
                     for job_data in data:
@@ -769,11 +832,11 @@ class World:
             print(self.data_dict)
         else:
             temp_dict = {}
-            for K in range(0, K_end, K_skip):
+            for K in range(K_start, K_end, K_skip):
                 for b in range(NUM_BOTS):
                     temp_dict[(b, K)] = [0, 0]
             for _ in range(iters):
-                for K in range(0, K_end, K_skip):
+                for K in range(K_start, K_end, K_skip):
                     self.gen_grid()
                     start_time = time.perf_counter()
                     for b in range(NUM_BOTS):
@@ -801,7 +864,7 @@ class World:
                             print("Ya fucked up bruv")
                     end_time = time.perf_counter()
             for b in range(NUM_BOTS):
-                for K in range(0, K_end, K_skip):
+                for K in range(K_start, K_end, K_skip):
                     self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
                     self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
             for b in range(NUM_BOTS):
@@ -811,9 +874,7 @@ class World:
             print(temp_dict)
             print(self.data_dict)
     def plot_data(self):
-        K = len(self.data_dict[0][0])
-        x = np.arange(K)
-        x = x * self.K_skip
+        x = np.arange(self.K_start, self.K_end, self.K_skip)
         plt.subplot(211)
         for b in range(NUM_BOTS):
             plt.plot(x, self.data_dict[b][0], label=f"Bot {b + 1} Success")
@@ -933,8 +994,8 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #    print("Success")
 #else:
 #    print("Failure")
-#plt.style.use('ggplot')
-#w = World(debug=False, jobs=1)
-#w.gather_data(iters=20, K_end=150, K_skip=20)
-#w.plot_data()
-sim_worst_case_bfs()
+plt.style.use('ggplot')
+w = World(debug=False, jobs=1)
+w.gather_data(iters=100, K_range=(40, 81, 10))
+w.plot_data()
+#sim_worst_case_bfs()
