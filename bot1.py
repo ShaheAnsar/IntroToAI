@@ -929,7 +929,7 @@ def proc_fun(ws):
                 elif ret == -2:
                     pass
                 else:
-                    print("Ya fucked up bruv")
+                    print("Should not be here")
     for b in range(NUM_BOTS):
         data_dict[b] = [[], []]
         for K in range(ws.K_start, ws.K_end, ws.K_skip):
@@ -1155,6 +1155,6 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(0, 100, 15), batch=20)
+w.gather_data(iters=100, K_range=(0, 100, 10), batch=20)
 w.plot_data()
 #sim_worst_case_bfs()
