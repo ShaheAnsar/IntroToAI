@@ -21,6 +21,8 @@ import time
 
 # Total number of Bot Types
 NUM_BOTS=4
+# Computer Limit
+COMPUTE_LIMIT=500
 
 class GridAttrib:
     __slots__ = ('open', 'bot_occupied', 'traversed', 'alien_id', 'captain_slot')
@@ -418,11 +420,13 @@ class Bot2:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        compute_counter = 0
         while not captain_found:
-            if len(path_deque) == 0:
+            if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT:
                 self.grid.remove_all_traversal()
                 #raise RuntimeError("No Path Found!!!")
                 return
+            compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
             self.grid.set_traversed(ind)
@@ -484,11 +488,13 @@ class Bot3:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        compute_counter = 0
         while not captain_found:
-            if len(path_deque) == 0:
+            if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT:
                 self.grid.remove_all_traversal()
                 #raise RuntimeError("No Path Found!!!")
                 return
+            compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
             self.grid.set_traversed(ind)
@@ -700,6 +706,7 @@ class Bot4:
                     print("Reverting...")
                 self.plan_path(1)
                 if len(self.path) == 0:
+                    self.evade2()
                     if self.debug:
                         print("No path found")
                     return
@@ -718,7 +725,6 @@ class Bot5:
         self.path = deque([])
         self.debug = debug
         self.risk_limit = 0.0
-        self.computation_limit = 5000
         self.K = 0
         for j in range(self.grid.D):
             for i in range(self.grid.D):
@@ -736,12 +742,14 @@ class Bot5:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
-        iters = 0
+        compute_counter = 0
         while not captain_found:
-            if len(path_deque) == 0:
+            # Divide by 2 because this can be run twice
+            if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT//2:
                 self.grid.remove_all_traversal()
                 #raise RuntimeError("No Path Found!!!")
                 return
+            compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
             self.grid.set_traversed(ind)
@@ -831,6 +839,7 @@ class Bot5:
                     print("Reverting...")
                 self.plan_path(1)
                 if len(self.path) == 0:
+                    self.evade2()
                     if self.debug:
                         print("No path found")
                     return
@@ -868,7 +877,7 @@ class WorldState:
         self.bot_caught = False
     def simulate_world(self, bot):
         for _ in range(1000):
-            print("Turn: {_}")
+            #print("Turn: {_}")
             if self.bot_caught:
                 break
             bot.move()
@@ -919,7 +928,7 @@ def proc_fun(ws):
                 elif b == 2:
                     bot = Bot3(ws.grid, ws.captain_ind, debug=ws.debug)
                 else:
-                    bot = Bot4(ws.grid, ws.captain_ind, debug=ws.debug)
+                    bot = Bot5(ws.grid, ws.captain_ind, debug=ws.debug)
                 ret = ws.simulate_world(bot)
                 if ret == 0:
                     temp_dict[(b, K)][0] += 1
@@ -993,7 +1002,6 @@ class World:
             for i in range(iters):
                 for K in range(K_start, K_end, K_skip):
                     self.gen_grid()
-                    start_time = time.perf_counter()
                     for b in range(NUM_BOTS):
                         self.grid.reset_grid()
                         self.gen_world(K)
@@ -1005,7 +1013,7 @@ class World:
                         elif b == 2:
                             bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
                         else:
-                            bot = Bot4(self.grid, self.captain_ind, debug=self.debug)
+                            bot = Bot5(self.grid, self.captain_ind, debug=self.debug)
                         ret = self.simulate_world(bot)
                         print(f"K={K},Bot {b + 1}, iter={i}, res={ret}")
                         if ret == 0:
@@ -1016,8 +1024,7 @@ class World:
                         elif ret == -2:
                             pass
                         else:
-                            print("Ya fucked up bruv")
-                    end_time = time.perf_counter()
+                            print("Shouldn't happen")
                 #if i % batch == 0:
                 #    print("Batching to file")
             for b in range(NUM_BOTS):
@@ -1034,23 +1041,23 @@ class World:
         x = np.arange(self.K_start, self.K_end, self.K_skip)
         plt.subplot(211)
         for b in range(NUM_BOTS):
-            plt.plot(x, self.data_dict[b][0], label=f"Bot {b + 1} Success")
+            plt.plot(x, self.data_dict[b][0], label=f"Bot {5 if b == 3 else b + 1} Success")
         plt.xlabel("No. of Aliens")
         plt.ylabel("Success Rate")
         plt.legend()
         plt.ylim(0.001, 1.2)
         plt.subplot(212)
         for b in range(NUM_BOTS):
-            plt.plot(x, self.data_dict[b][1], label=f"Bot { b + 1} Survival")
+            plt.plot(x, self.data_dict[b][1], label=f"Bot {5 if b==3 else b + 1} Survival")
         plt.xlabel("No. of Aliens")
         plt.ylabel("Survival Rate")
         plt.legend()
-        plt.ylim(0.001, 0.1)
+        plt.ylim(0.001, 1.2)
         plt.show()
 
     def simulate_world(self, bot):
         for _ in range(1000):
-            print(f" Turn: {_}")
+            #print(f" Turn: {_}")
             if self.bot_caught:
                 break
             bot.move()
@@ -1090,11 +1097,10 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
         for i in range(grid.D):
             grid.grid[j][i].open
     ind = (0, 0)
-    start_time = time.perf_counter()
     for _ in range(1000):
         print(f"Iter: {_}")
         visited = set()
-        parent_map = {ind : None}
+        parent_map = {ind: None}
         fringe = deque([ind])
         while True:
             if len(fringe) == 0:
@@ -1112,7 +1118,6 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
                 parent_map[n] = ind
             const_func(ind)
             fringe.extend(neighbors)
-    end_time = time.perf_counter()
     print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
 
 
@@ -1154,6 +1159,6 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(0, 100, 15), batch=20)
+w.gather_data(iters=100, K_range=(0, 100, 10), batch=20)
 w.plot_data()
 #sim_worst_case_bfs()
