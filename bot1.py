@@ -700,6 +700,7 @@ class Bot4:
                     print("Reverting...")
                 self.plan_path(1)
                 if len(self.path) == 0:
+                    self.evade2()
                     if self.debug:
                         print("No path found")
                     return
