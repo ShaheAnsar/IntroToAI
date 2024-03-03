@@ -155,10 +155,9 @@ class Grid:
             if depth1:
                 return True
             neighbors = self.get_open_neighbors(ind)
-            for n in neighbors:
-                if self.has_alien(n):
-                    return True
-            return False
+            alien_exists = any([self.has_alien(n) for n in neighbors])
+            del neighbors
+            return alien_exists
 
             #return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
         else:
@@ -953,7 +952,7 @@ class World:
         self.captain_found = False
         self.bot_caught = False
 
-    def gather_data(self, iters=20, K_range=(0, 20, 1)):
+    def gather_data(self, iters=20, K_range=(0, 20, 1), batch=0):
         K_start = K_range[0]
         K_end = K_range[1]
         K_skip = K_range[2]
@@ -962,6 +961,7 @@ class World:
         self.K_skip = K_range[2]
         self.K_skip = K_skip
         self.data_dict = {}
+        self.batch = 0
         for b in range(NUM_BOTS):
             for K in range(K_start, K_end, K_skip):
                 self.data_dict[b] = [[], []]
@@ -990,7 +990,7 @@ class World:
             for K in range(K_start, K_end, K_skip):
                 for b in range(NUM_BOTS):
                     temp_dict[(b, K)] = [0, 0]
-            for _ in range(iters):
+            for i in range(iters):
                 for K in range(K_start, K_end, K_skip):
                     self.gen_grid()
                     start_time = time.perf_counter()
@@ -1007,7 +1007,7 @@ class World:
                         else:
                             bot = Bot4(self.grid, self.captain_ind, debug=self.debug)
                         ret = self.simulate_world(bot)
-                        print(f"K={K},Bot {b + 1}, iter={_}, res={ret}")
+                        print(f"K={K},Bot {b + 1}, iter={i}, res={ret}")
                         if ret == 0:
                             temp_dict[(b, K)][0] += 1
                             #temp_dict[(b, K)][1] += 1
@@ -1018,6 +1018,8 @@ class World:
                         else:
                             print("Ya fucked up bruv")
                     end_time = time.perf_counter()
+                #if i % batch == 0:
+                #    print("Batching to file")
             for b in range(NUM_BOTS):
                 for K in range(K_start, K_end, K_skip):
                     self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
@@ -1152,6 +1154,6 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(10, 400, 20), batch=20)
+w.gather_data(iters=100, K_range=(0, 100, 15), batch=20)
 w.plot_data()
 #sim_worst_case_bfs()
