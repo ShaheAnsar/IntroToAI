@@ -22,7 +22,7 @@ import time
 NUM_BOTS=4
 
 class Grid:
-    def __init__(self, D=30, debug=True):
+    def __init__(self, D=40, debug=True):
         self.D = D
         self.grid = []
         self.debug = debug
@@ -515,7 +515,6 @@ class Bot3:
     def move(self):
         self.plan_path(2)
         if len(self.path) == 0:
-            print("REVERT")
             if self.debug:
                 print("Reverting...")
             self.plan_path(1)
@@ -537,6 +536,12 @@ class Bot4:
         self.path = deque([])
         self.debug = debug
         self.risk_limit = 0.0
+        self.K = 0
+        for j in range(self.grid.D):
+            for i in range(self.grid.D):
+                if self.grid.grid[j][i]['alien_id'] != -1:
+                    self.K += 1
+
 
     def plan_path(self, k=2):
         if self.debug:
@@ -651,11 +656,11 @@ class Bot4:
         # add it to the possible positions
         possible_positions.append(self.ind)
         dangers = [self.calculate_danger(p, offset) for p in possible_positions]
-        print(dangers)
+        #print(dangers)
         min_position_i = min(enumerate(dangers), key=lambda x: x[1])[0]
         next_position = possible_positions[min_position_i]
-        print(f"Chosen Danger: {dangers[min_position_i]}")
-        print(f"Chosen Direction: {next_position[0] - self.ind[0]}, {next_position[1] - self.ind[1]}")
+        #print(f"Chosen Danger: {dangers[min_position_i]}")
+        #print(f"Chosen Direction: {next_position[0] - self.ind[0]}, {next_position[1] - self.ind[1]}")
         self.grid.remove_bot(self.ind)
         self.ind = next_position
         self.grid.place_bot(self.ind)
@@ -696,6 +701,16 @@ class Bot4:
         self.grid.remove_bot(self.ind)
         self.ind = next_dest
         self.grid.place_bot(self.ind)
+# How would I desing a grid to maximize success rate of
+# The bots?
+# Bots die right now because they mostly get caught for me
+# That means we need to make a grid that allows for multiple
+# alternate paths.
+# Another thing to do would be to restrict the movement of aliens so
+# they are much more predictable. Maybe spwaning them near dead ends
+# would be a better idea instead of spawning them in the great opens
+# For now let's start out with a simple grid, one that is completely open
+# and one that is a spiral, and start generating grids by combining them
 
 class WorldState:
     def __init__(self, debug=True):
@@ -996,6 +1011,6 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(40, 81, 10))
+w.gather_data(iters=100, K_range=(10, 400, 30))
 w.plot_data()
 #sim_worst_case_bfs()
