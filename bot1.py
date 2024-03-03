@@ -22,16 +22,14 @@ import time
 NUM_BOTS=4
 
 class Grid:
-    def __init__(self, D=40, debug=True):
+    def __init__(self, D=30, debug=True):
         self.D = D
         self.grid = []
         self.debug = debug
         self.gen_grid()
 
     def valid_index(self, ind):
-        if ind[0] >= self.D or ind[0] < 0 or ind[1] >= self.D or ind[1] < 0:
-            return False
-        return True
+        return not (ind[0] >= self.D or ind[0] < 0 or ind[1] >= self.D or ind[1] < 0)
 
     def get_neighbors(self, ind):
         neighbors = []
@@ -51,10 +49,11 @@ class Grid:
         up = (ind[0], ind[1] + 1)
         down = (ind[0], ind[1] - 1)
         indices = [left, right, up, down]
-        for index in indices:
-            if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True:
-                neighbors.append(index)
-        return neighbors
+        #for index in indices:
+        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True:
+        #        neighbors.append(index)
+        #return neighbors
+        return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]]['open']]
 
     # Gets only the unvisited open neighbors. Used mainly for path planning.
     def get_untraversed_open_neighbors(self, ind):
@@ -64,10 +63,10 @@ class Grid:
         up = (ind[0], ind[1] + 1)
         down = (ind[0], ind[1] - 1)
         indices = [left, right, up, down]
-        for index in indices:
-            if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
-                neighbors.append(index)
-        return neighbors
+        #for index in indices:
+        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
+        #        neighbors.append(index)
+        return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] and not self.grid[index[1]][index[0]]['traversed']]
     
     # The steps to be iterated over and over till they cannot be done are implemented here
     def gen_grid_iterate(self):
@@ -232,13 +231,11 @@ class Grid:
 class Alien:
     # This alien_id is used to keep track of every alien
     alien_id = 0
-    aliens_ind = []
     def __init__(self, grid):
         self.grid = grid
         indices = self.grid.get_unoccupied_open_indices()
         ind = random.choice(indices)
         self.ind = ind
-        Alien.aliens_ind.append(ind)
         self.alien_id = Alien.alien_id
         self.grid.place_alien(ind, Alien.alien_id)
         Alien.alien_id += 1
@@ -730,6 +727,7 @@ class WorldState:
         self.bot_caught = False
     def simulate_world(self, bot):
         for _ in range(1000):
+            print("Turn: {_}")
             if self.bot_caught:
                 break
             bot.move()
@@ -908,6 +906,7 @@ class World:
 
     def simulate_world(self, bot):
         for _ in range(1000):
+            print(f" Turn: {_}")
             if self.bot_caught:
                 break
             bot.move()
@@ -1011,6 +1010,6 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(10, 400, 30))
+w.gather_data(iters=20, K_range=(10, 51, 10))
 w.plot_data()
 #sim_worst_case_bfs()
