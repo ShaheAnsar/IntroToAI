@@ -349,6 +349,7 @@ class Bot1:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited = set()
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
@@ -356,6 +357,9 @@ class Bot1:
                 return
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
