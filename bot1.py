@@ -22,7 +22,7 @@ import time
 # Total number of Bot Types
 NUM_BOTS=4
 # Computer Limit
-COMPUTE_LIMIT=500
+COMPUTE_LIMIT=10000
 
 class GridAttrib:
     __slots__ = ('open', 'bot_occupied', 'traversed', 'alien_id', 'captain_slot')
@@ -351,13 +351,19 @@ class Bot1:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited = set()
+        compute_counter = 0
         while not captain_found:
-            if len(path_deque) == 0:
+            if len(path_deque) == 0 or compute_counter >= COMPUTE_LIMIT:
                 self.grid.remove_all_traversal()
                 #raise RuntimeError("No Path Found!!!")
                 return
+            compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
@@ -421,6 +427,7 @@ class Bot2:
         path_deque = deque([path_tree])
         destination = None
         compute_counter = 0
+        visited = set()
         while not captain_found:
             if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT:
                 self.grid.remove_all_traversal()
@@ -429,6 +436,9 @@ class Bot2:
             compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
@@ -489,14 +499,18 @@ class Bot3:
         path_deque = deque([path_tree])
         destination = None
         compute_counter = 0
+        visited = set()
         while not captain_found:
-            if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT:
+            if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT//2:
                 self.grid.remove_all_traversal()
                 #raise RuntimeError("No Path Found!!!")
                 return
             compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
@@ -566,6 +580,7 @@ class Bot4:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited = set()
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
@@ -573,6 +588,9 @@ class Bot4:
                 return
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
@@ -725,6 +743,7 @@ class Bot5:
         self.path = deque([])
         self.debug = debug
         self.risk_limit = 0.0
+        self.computation_limit = 5000
         self.K = 0
         for j in range(self.grid.D):
             for i in range(self.grid.D):
@@ -742,7 +761,9 @@ class Bot5:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited=set()
         compute_counter = 0
+        iters = 0
         while not captain_found:
             # Divide by 2 because this can be run twice
             if len(path_deque) == 0 or compute_counter > COMPUTE_LIMIT//2:
@@ -752,6 +773,9 @@ class Bot5:
             compute_counter += 1
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
