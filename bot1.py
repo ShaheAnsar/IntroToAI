@@ -33,7 +33,7 @@ class GridAttrib:
 
 
 class Grid:
-    def __init__(self, D=30, debug=True):
+    def __init__(self, D=20, debug=True):
         self.D = D
         self.grid = []
         self.debug = debug
@@ -238,6 +238,334 @@ class Grid:
             s += "\n"
         return s
 
+
+
+class OpenGrid:
+    def __init__(self, D=20, debug=True):
+        self.D = D
+        self.grid = []
+        self.debug = debug
+        self.gen_grid()
+
+    def valid_index(self, ind):
+        return not (ind[0] >= self.D or ind[0] < 0 or ind[1] >= self.D or ind[1] < 0)
+
+    def get_neighbors(self, ind):
+        neighbors = []
+        left = (ind[0] - 1, ind[1])
+        right = (ind[0] + 1, ind[1])
+        up = (ind[0], ind[1] + 1)
+        down = (ind[0], ind[1] - 1)
+        indices = [left, right, up, down]
+        for index in indices:
+            if self.valid_index(index):
+                neighbors.append(index)
+        return neighbors
+    def get_open_neighbors(self, ind):
+        neighbors = []
+        left = (ind[0] - 1, ind[1])
+        right = (ind[0] + 1, ind[1])
+        up = (ind[0], ind[1] + 1)
+        down = (ind[0], ind[1] - 1)
+        indices = [left, right, up, down]
+        #for index in indices:
+        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True:
+        #        neighbors.append(index)
+        #return neighbors
+        return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]].open]
+
+    # Gets only the unvisited open neighbors. Used mainly for path planning.
+    def get_untraversed_open_neighbors(self, ind):
+        neighbors = []
+        left = (ind[0] - 1, ind[1])
+        right = (ind[0] + 1, ind[1])
+        up = (ind[0], ind[1] + 1)
+        down = (ind[0], ind[1] - 1)
+        indices = [left, right, up, down]
+        #for index in indices:
+        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
+        #        neighbors.append(index)
+        return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]].open and not self.grid[index[1]][index[0]].traversed]
+    
+    # Grid generation happens here
+    def gen_grid(self):
+        for j in range(self.D):
+            row = []
+            for i in range(self.D):
+                # Honestly not the best way to do this
+                # I regretted this later down the road
+                # Every cell has its own attributes that
+                # I use to keep track of everything
+                g = GridAttrib()
+                g.open = True
+                row.append(g)
+            self.grid.append(row)
+
+
+    # A bunch of simple helper functions
+
+    def place_alien(self, ind, alien_id):
+        self.grid[ind[1]][ind[0]].alien_id = alien_id
+    def remove_alien(self, ind):
+        self.grid[ind[1]][ind[0]].alien_id = -1
+    # k tells us how deep to look from the index
+    def has_alien(self, ind, k=1):
+        if k == 1:
+            return self.grid[ind[1]][ind[0]].alien_id != -1
+        elif k==2:
+            depth1 = self.grid[ind[1]][ind[0]].alien_id != -1
+            if depth1:
+                return True
+            neighbors = self.get_open_neighbors(ind)
+            alien_exists = any([self.has_alien(n) for n in neighbors])
+            del neighbors
+            return alien_exists
+
+            #return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
+        else:
+            # This was implemented in case k >= 3 was needed.
+            # It was not needed
+            print("SHOULD NOT HAPPEN")
+            #print(f"Has_Alien: {ind}")
+            traversed = {}
+            children = deque([])
+            current = deque([ind])
+            #print("Has_Alien: depth more than 1")
+            while k >= 1:
+                #print(f" At inverse depth of {k}")
+                #print(f"Current Fringe: {current}")
+                for ind in current:
+                    traversed[ind] = 1
+                    if self.grid[ind[1]][ind[0]].alien_id != -1:
+                        return True
+                    neighbors = self.get_open_neighbors(ind)
+                    #print(f"Neighbors before filter: {neighbors}")
+                    neighbors = [neighbor for neighbor in neighbors if neighbor not in traversed]
+                    #print(f"Neighbors after filter: {neighbors}")
+                    children.extend(neighbors)
+                current = children
+                children = deque([])
+                k -= 1
+            return False
+                
+                    
+                
+    def place_bot(self, ind):
+        self.grid[ind[1]][ind[0]].bot_occupied = True
+    def remove_bot(self, ind):
+        self.grid[ind[1]][ind[0]].bot_occupied = False
+    def set_traversed(self, ind):
+        self.grid[ind[1]][ind[0]].traversed = True
+    def remove_all_traversal(self):
+        for j in range(self.D):
+            for i in range(self.D):
+                self.grid[j][i].traversed = False
+
+    def get_open_indices(self):
+        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i].open == True]
+
+    def get_unoccupied_open_indices(self):
+        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i].open == True and self.grid[j][i].alien_id == -1
+                and self.grid[j][i].bot_occupied == False]
+    # End of all helper functions
+
+    # A function to reset grid
+    # Used to speed up data gathering since
+    # it allows me to use the same grid for all bots
+    def reset_grid(self):
+        for j in range(self.D):
+            for i in range(self.D):
+                self.grid[j][i].alien_id = -1
+                self.grid[j][i].bot_occupied = False
+                self.grid[j][i].captain_slot = False
+                self.grid[j][i].traversed = False
+
+    def __str__(self):
+        s = ""
+        for j in range(self.D):
+            for i in range(self.D):
+                if self.grid[j][i].open == True:
+                    if self.grid[j][i].captain_slot:
+                        s += colored('C', 'magenta')
+                    elif self.grid[j][i].alien_id != -1:
+                        s += colored('A', 'red')
+                    elif self.grid[j][i].bot_occupied:
+                        s += colored('B', 'yellow')
+                    elif self.grid[j][i].traversed:
+                        s += colored('P', 'blue')
+                    else:
+                        s += colored('O', 'green')
+                else:
+                    s += 'X'
+            s += "\n"
+        return s
+
+
+
+class CorridoorGrid:
+    def __init__(self, D=20, debug=True):
+        self.D = D
+        self.grid = []
+        self.debug = debug
+        self.gen_grid()
+
+    def valid_index(self, ind):
+        return not (ind[0] >= self.D or ind[0] < 0 or ind[1] >= self.D or ind[1] < 0)
+
+    def get_neighbors(self, ind):
+        neighbors = []
+        left = (ind[0] - 1, ind[1])
+        right = (ind[0] + 1, ind[1])
+        up = (ind[0], ind[1] + 1)
+        down = (ind[0], ind[1] - 1)
+        indices = [left, right, up, down]
+        for index in indices:
+            if self.valid_index(index):
+                neighbors.append(index)
+        return neighbors
+    def get_open_neighbors(self, ind):
+        neighbors = []
+        left = (ind[0] - 1, ind[1])
+        right = (ind[0] + 1, ind[1])
+        up = (ind[0], ind[1] + 1)
+        down = (ind[0], ind[1] - 1)
+        indices = [left, right, up, down]
+        #for index in indices:
+        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True:
+        #        neighbors.append(index)
+        #return neighbors
+        return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]].open]
+
+    # Gets only the unvisited open neighbors. Used mainly for path planning.
+    def get_untraversed_open_neighbors(self, ind):
+        neighbors = []
+        left = (ind[0] - 1, ind[1])
+        right = (ind[0] + 1, ind[1])
+        up = (ind[0], ind[1] + 1)
+        down = (ind[0], ind[1] - 1)
+        indices = [left, right, up, down]
+        #for index in indices:
+        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
+        #        neighbors.append(index)
+        return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]].open and not self.grid[index[1]][index[0]].traversed]
+    
+    # Grid generation happens here
+    def gen_grid(self):
+        block_dim = (self.D - 8)//3
+        for j in range(self.D):
+            row = []
+            for i in range(self.D):
+                # Honestly not the best way to do this
+                # I regretted this later down the road
+                # Every cell has its own attributes that
+                # I use to keep track of everything
+                g = GridAttrib()
+                if i <= 1 or i >= self.D - 2 or j <= 1 or j >= self.D - 2:
+                    g.open = True
+                else:
+                    g.open = False if (i % block_dim != 0) and (j % block_dim != 0) else True
+                row.append(g)
+            self.grid.append(row)
+
+
+    # A bunch of simple helper functions
+
+    def place_alien(self, ind, alien_id):
+        self.grid[ind[1]][ind[0]].alien_id = alien_id
+    def remove_alien(self, ind):
+        self.grid[ind[1]][ind[0]].alien_id = -1
+    # k tells us how deep to look from the index
+    def has_alien(self, ind, k=1):
+        if k == 1:
+            return self.grid[ind[1]][ind[0]].alien_id != -1
+        elif k==2:
+            depth1 = self.grid[ind[1]][ind[0]].alien_id != -1
+            if depth1:
+                return True
+            neighbors = self.get_open_neighbors(ind)
+            alien_exists = any([self.has_alien(n) for n in neighbors])
+            del neighbors
+            return alien_exists
+
+            #return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
+        else:
+            # This was implemented in case k >= 3 was needed.
+            # It was not needed
+            print("SHOULD NOT HAPPEN")
+            #print(f"Has_Alien: {ind}")
+            traversed = {}
+            children = deque([])
+            current = deque([ind])
+            #print("Has_Alien: depth more than 1")
+            while k >= 1:
+                #print(f" At inverse depth of {k}")
+                #print(f"Current Fringe: {current}")
+                for ind in current:
+                    traversed[ind] = 1
+                    if self.grid[ind[1]][ind[0]].alien_id != -1:
+                        return True
+                    neighbors = self.get_open_neighbors(ind)
+                    #print(f"Neighbors before filter: {neighbors}")
+                    neighbors = [neighbor for neighbor in neighbors if neighbor not in traversed]
+                    #print(f"Neighbors after filter: {neighbors}")
+                    children.extend(neighbors)
+                current = children
+                children = deque([])
+                k -= 1
+            return False
+                
+                    
+                
+    def place_bot(self, ind):
+        self.grid[ind[1]][ind[0]].bot_occupied = True
+    def remove_bot(self, ind):
+        self.grid[ind[1]][ind[0]].bot_occupied = False
+    def set_traversed(self, ind):
+        self.grid[ind[1]][ind[0]].traversed = True
+    def remove_all_traversal(self):
+        for j in range(self.D):
+            for i in range(self.D):
+                self.grid[j][i].traversed = False
+
+    def get_open_indices(self):
+        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i].open == True]
+
+    def get_unoccupied_open_indices(self):
+        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i].open == True and self.grid[j][i].alien_id == -1
+                and self.grid[j][i].bot_occupied == False]
+    # End of all helper functions
+
+    # A function to reset grid
+    # Used to speed up data gathering since
+    # it allows me to use the same grid for all bots
+    def reset_grid(self):
+        for j in range(self.D):
+            for i in range(self.D):
+                self.grid[j][i].alien_id = -1
+                self.grid[j][i].bot_occupied = False
+                self.grid[j][i].captain_slot = False
+                self.grid[j][i].traversed = False
+
+    def __str__(self):
+        s = ""
+        for j in range(self.D):
+            for i in range(self.D):
+                if self.grid[j][i].open == True:
+                    if self.grid[j][i].captain_slot:
+                        s += colored('C', 'magenta')
+                    elif self.grid[j][i].alien_id != -1:
+                        s += colored('A', 'red')
+                    elif self.grid[j][i].bot_occupied:
+                        s += colored('B', 'yellow')
+                    elif self.grid[j][i].traversed:
+                        s += colored('P', 'blue')
+                    else:
+                        s += colored('O', 'green')
+                else:
+                    s += 'X'
+            s += "\n"
+        return s
+
 class Alien:
     # This alien_id is used to keep track of every alien
     alien_id = 0
@@ -262,6 +590,32 @@ class Alien:
             self.grid.remove_alien(self.ind)
             self.ind = neighbors_without_aliens[rand_ind]
             self.grid.place_alien(self.ind, self.alien_id)
+
+class Alien:
+    # This alien_id is used to keep track of every alien
+    alien_id = 0
+    def __init__(self, grid):
+        self.grid = grid
+        indices = self.grid.get_unoccupied_open_indices()
+        ind = random.choice(indices)
+        self.ind = ind
+        self.alien_id = Alien.alien_id
+        self.grid.place_alien(ind, Alien.alien_id)
+        Alien.alien_id += 1
+        #print(ind)
+
+    def move(self):
+        # Get all possible locations for the alien
+        neighbors = self.grid.get_open_neighbors(self.ind)
+        # Filter out the ones that are occupied by other aliens
+        neighbors_without_aliens = [neighbor for neighbor in neighbors if self.grid.grid[neighbor[1]][neighbor[0]].alien_id == -1]
+        # Randomly choose any of the locations
+        if len(neighbors_without_aliens) > 0:
+            rand_ind = np.random.randint(0, len( neighbors_without_aliens ))
+            self.grid.remove_alien(self.ind)
+            self.ind = neighbors_without_aliens[rand_ind]
+            self.grid.place_alien(self.ind, self.alien_id)
+
 
 # Used for parent tracking with BFS
 class PathTreeNode:
@@ -832,6 +1186,7 @@ class Bot5:
                     print("Reverting...")
                 self.plan_path(1)
                 if len(self.path) == 0:
+                    self.evade2()
                     if self.debug:
                         print("No path found")
                     return
@@ -938,14 +1293,15 @@ def proc_fun(ws):
     return data_dict
 
 class World:
-    def __init__(self, debug=True, track_time = False, jobs=1):
+    def __init__(self, debug=True, track_time = False, jobs=1, grid=Grid):
         self.debug = debug
         self.jobs = jobs
         if jobs > 1:
             self.states = [WorldState(debug=debug) for _ in range(jobs)]
+        self.grid_obj = grid
 
     def gen_grid(self):
-        self.grid = Grid(debug=self.debug)
+        self.grid = self.grid_obj(debug=self.debug)
 
     def gen_world(self, K):
         self.captain_ind = random.choice(self.grid.get_open_indices())
@@ -1102,23 +1458,29 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
                 break
             ind = fringe.popleft()
             if ind in visited:
-                print("ERROR")
+                print("ERROR1")
+                print(visited)
+                print(parent_map)
+                print(ind)
+                break
             print(ind)
             visited.add(ind)
             neighbors = grid.get_open_neighbors(ind)
-            neighbors = [n for n in neighbors if n not in visited]
-            for n in neighbors:
+            neighbors_untraversed = [n for n in neighbors if n not in visited]
+            for n in neighbors_untraversed:
                 if n in visited:
-                    print("ERROR")
+                    print("ERROR2")
+                    break
                 parent_map[n] = ind
             const_func(ind)
-            fringe.extend(neighbors)
+            fringe.extend(neighbors_untraversed)
     end_time = time.perf_counter()
     print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
 
 
-#debug = False
-#grid = Grid(debug=debug)
+debug = False
+grid = CorridoorGrid(debug=debug)
+print(grid)
 #captain_ind = random.choice(grid.get_open_indices())
 #grid.grid[captain_ind[1]][captain_ind[0]]['captain_slot'] = True
 #bot = Bot4(grid, captain_ind, debug=debug)
@@ -1154,7 +1516,7 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #else:
 #    print("Failure")
 plt.style.use('ggplot')
-w = World(debug=False, jobs=1)
+w = World(debug=False, jobs=1, grid=Grid)
 w.gather_data(iters=100, K_range=(0, 100, 10), batch=20)
 w.plot_data()
 #sim_worst_case_bfs()
