@@ -418,6 +418,7 @@ class Bot2:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited = set()
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
@@ -425,6 +426,9 @@ class Bot2:
                 return
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
@@ -484,6 +488,7 @@ class Bot3:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited = set()
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
@@ -491,11 +496,17 @@ class Bot3:
                 return
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
                 break
             neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
+            for n in neighbors_ind:
+                if n in visited:
+                    print("Error 2")
             for neighbor_ind in neighbors_ind:
                 # Add all possible paths that do not hit an alien
                 if not self.grid.has_alien(neighbor_ind, k = k):
@@ -560,6 +571,7 @@ class Bot4:
         path_tree.data = self.ind
         path_deque = deque([path_tree])
         destination = None
+        visited = set()
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
@@ -567,6 +579,9 @@ class Bot4:
                 return
             node = path_deque.popleft()
             ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
             self.grid.set_traversed(ind)
             if ind == self.captain_ind:
                 destination = node
@@ -869,7 +884,7 @@ class WorldState:
         self.bot_caught = False
     def simulate_world(self, bot):
         for _ in range(1000):
-            print("Turn: {_}")
+            print(f"Turn: {_}")
             if self.bot_caught:
                 break
             bot.move()
@@ -994,7 +1009,6 @@ class World:
             for i in range(iters):
                 for K in range(K_start, K_end, K_skip):
                     self.gen_grid()
-                    start_time = time.perf_counter()
                     for b in range(NUM_BOTS):
                         self.grid.reset_grid()
                         self.gen_world(K)
@@ -1018,7 +1032,6 @@ class World:
                             pass
                         else:
                             print("Ya fucked up bruv")
-                    end_time = time.perf_counter()
                 #if i % batch == 0:
                 #    print("Batching to file")
             for b in range(NUM_BOTS):
@@ -1154,7 +1167,7 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
 #else:
 #    print("Failure")
 plt.style.use('ggplot')
-w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(0, 100, 10), batch=20)
+w = World(debug=False, jobs=12)
+w.gather_data(iters=120, K_range=(0, 400, 10), batch=20)
 w.plot_data()
 #sim_worst_case_bfs()
