@@ -13,7 +13,6 @@ import multiprocessing as mp
 from multiprocessing import Pool
 import time
 
-#GridPointAttrib = {}
 
 
 
@@ -60,10 +59,6 @@ class Grid:
         up = (ind[0], ind[1] + 1)
         down = (ind[0], ind[1] - 1)
         indices = [left, right, up, down]
-        #for index in indices:
-        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True:
-        #        neighbors.append(index)
-        #return neighbors
         return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]].open]
 
     # Gets only the unvisited open neighbors. Used mainly for path planning.
@@ -74,9 +69,6 @@ class Grid:
         up = (ind[0], ind[1] + 1)
         down = (ind[0], ind[1] - 1)
         indices = [left, right, up, down]
-        #for index in indices:
-        #    if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
-        #        neighbors.append(index)
         return [index for index in indices if self.valid_index(index) and self.grid[index[1]][index[0]].open and not self.grid[index[1]][index[0]].traversed]
     
     # The steps to be iterated over and over till they cannot be done are implemented here
@@ -159,27 +151,20 @@ class Grid:
             del neighbors
             return alien_exists
 
-            #return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
         else:
             # This was implemented in case k >= 3 was needed.
             # It was not needed
             print("SHOULD NOT HAPPEN")
-            #print(f"Has_Alien: {ind}")
             traversed = {}
             children = deque([])
             current = deque([ind])
-            #print("Has_Alien: depth more than 1")
             while k >= 1:
-                #print(f" At inverse depth of {k}")
-                #print(f"Current Fringe: {current}")
                 for ind in current:
                     traversed[ind] = 1
                     if self.grid[ind[1]][ind[0]].alien_id != -1:
                         return True
                     neighbors = self.get_open_neighbors(ind)
-                    #print(f"Neighbors before filter: {neighbors}")
                     neighbors = [neighbor for neighbor in neighbors if neighbor not in traversed]
-                    #print(f"Neighbors after filter: {neighbors}")
                     children.extend(neighbors)
                 current = children
                 children = deque([])
@@ -249,7 +234,6 @@ class Alien:
         self.alien_id = Alien.alien_id
         self.grid.place_alien(ind, Alien.alien_id)
         Alien.alien_id += 1
-        #print(ind)
 
     def move(self):
         # Get all possible locations for the alien
@@ -281,64 +265,6 @@ class Bot1:
         self.path = None
         self.debug = debug
 
-    #def plan_path(self):
-    #    self.path = deque([])
-    #    if self.debug:
-    #        print("Planning Path...")  # If path is empty we plan one
-    #    self.grid.remove_all_traversal()
-    #    captain_found = False
-    #    path_tree = PathTreeNode()
-    #    path_tree.data = self.ind
-    #    #path_deque = deque([path_tree])
-    #    path_deque = deque([self.ind])
-    #    path_map = {self.ind: None}
-    #    visited = set()
-    #    destination = None
-    #    while not captain_found:
-    #        if len(path_deque) == 0:
-    #            #raise RuntimeError("No Path Found!!!")
-    #            return
-    #        #node = path_deque.popleft()
-    #        #ind = node.data
-    #        ind = path_deque.popleft()
-    #        visited.add(ind)
-    #        if self.debug:
-    #            print(f"Current Node: {ind}")
-    #        #self.grid.set_traversed(ind)
-    #        if ind == self.captain_ind:
-    #            destination = ind
-    #            break
-    #        neighbors_ind = self.grid.get_open_neighbors(ind)
-    #        neighbors_ind = [i for i in neighbors_ind if i not in visited]
-    #        for neighbor_ind in neighbors_ind:
-    #            # Add all possible paths that do not hit an alien
-    #            if not self.grid.has_alien(neighbor_ind):
-    #                path_deque.append(neighbor_ind)
-    #                path_map[neighbor_ind] = ind
-    #                #new_node = PathTreeNode()
-    #                #new_node.data = neighbor_ind
-    #                #new_node.parent = node
-    #                #node.children.append(new_node)
-
-    #        #path_deque.extend(node.children)
-    #    #self.grid.remove_all_traversal()
-    #    if self.debug:
-    #        print("Planning Done!")
-    #    reverse_path = []
-    #    next_ind = destination
-    #    while next_ind is not None:
-    #        reverse_path.append(next_ind)
-    #        next_ind = path_map[next_ind]
-    #    #node = destination
-    #    #while node.parent is not None:
-    #    #    reverse_path.append(node.data)
-    #    #    node = node.parent
-    #    self.path.extend(reversed(reverse_path))
-    #    for ind in self.path:
-    #        self.grid.set_traversed(ind)
-    #    if self.debug:
-    #        print("Planned Path")
-    #        print(self.grid)
     def plan_path(self):
         if self.debug:
             print("Planning Path...")  # If path is empty we plan one
@@ -353,7 +279,6 @@ class Bot1:
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
                 return
             node = path_deque.popleft()
             ind = node.data
@@ -426,7 +351,6 @@ class Bot2:
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
                 return
             node = path_deque.popleft()
             ind = node.data
@@ -496,7 +420,6 @@ class Bot3:
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
                 return
             node = path_deque.popleft()
             ind = node.data
@@ -579,7 +502,6 @@ class Bot4:
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
                 return
             node = path_deque.popleft()
             ind = node.data
@@ -682,11 +604,8 @@ class Bot4:
         # add it to the possible positions
         possible_positions.append(self.ind)
         dangers = [self.calculate_danger(p, offset) for p in possible_positions]
-        #print(dangers)
         min_position_i = min(enumerate(dangers), key=lambda x: x[1])[0]
         next_position = possible_positions[min_position_i]
-        #print(f"Chosen Danger: {dangers[min_position_i]}")
-        #print(f"Chosen Direction: {next_position[0] - self.ind[0]}, {next_position[1] - self.ind[1]}")
         self.grid.remove_bot(self.ind)
         self.ind = next_position
         self.grid.place_bot(self.ind)
@@ -709,7 +628,6 @@ class Bot4:
                 self.risk_limit = 1
             elif self.risk_limit < 0:
                 self.risk_limit = 0
-            #self.risk_limit = 1.0
             if(alpha > self.risk_limit):
                 self.evade2()
                 return
@@ -760,7 +678,6 @@ class Bot5:
         while not captain_found:
             if len(path_deque) == 0:
                 self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
                 return
             node = path_deque.popleft()
             ind = node.data
@@ -814,11 +731,8 @@ class Bot5:
         # add it to the possible positions
         possible_positions.append(self.ind)
         dangers = [self.calculate_danger(p, offset) for p in possible_positions]
-        #print(dangers)
         min_position_i = min(enumerate(dangers), key=lambda x: x[1])[0]
         next_position = possible_positions[min_position_i]
-        #print(f"Chosen Danger: {dangers[min_position_i]}")
-        #print(f"Chosen Direction: {next_position[0] - self.ind[0]}, {next_position[1] - self.ind[1]}")
         self.grid.remove_bot(self.ind)
         self.ind = next_position
         self.grid.place_bot(self.ind)
@@ -841,7 +755,6 @@ class Bot5:
                 self.risk_limit = 1
             elif self.risk_limit < 0:
                 self.risk_limit = 0
-            #self.risk_limit = 1.0
             if(alpha > self.risk_limit):
                 self.evade2()
                 return
@@ -859,16 +772,6 @@ class Bot5:
         self.grid.remove_bot(self.ind)
         self.ind = next_dest
         self.grid.place_bot(self.ind)
-# How would I desing a grid to maximize success rate of
-# The bots?
-# Bots die right now because they mostly get caught for me
-# That means we need to make a grid that allows for multiple
-# alternate paths.
-# Another thing to do would be to restrict the movement of aliens so
-# they are much more predictable. Maybe spwaning them near dead ends
-# would be a better idea instead of spawning them in the great opens
-# For now let's start out with a simple grid, one that is completely open
-# and one that is a spiral, and start generating grids by combining them
 
 class WorldState:
     def __init__(self, debug=True):
@@ -1029,15 +932,12 @@ class World:
                         print(f"K={K},Bot {b + 1}, iter={i}, res={ret}")
                         if ret == 0:
                             temp_dict[(b, K)][0] += 1
-                            #temp_dict[(b, K)][1] += 1
                         elif ret == -1:
                             temp_dict[(b, K)][1] += 1
                         elif ret == -2:
                             pass
                         else:
-                            print("Ya fucked up bruv")
-                #if i % batch == 0:
-                #    print("Batching to file")
+                            print("Shouldn't be here")
             for b in range(NUM_BOTS):
                 for K in range(K_start, K_end, K_skip):
                     self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
@@ -1134,44 +1034,7 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
     print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
 
 
-#debug = False
-#grid = Grid(debug=debug)
-#captain_ind = random.choice(grid.get_open_indices())
-#grid.grid[captain_ind[1]][captain_ind[0]]['captain_slot'] = True
-#bot = Bot4(grid, captain_ind, debug=debug)
-#print(f"Bot index: {bot.ind}")
-#aliens = [Alien(grid) for _ in range(100)]
-#print("After placing 10 alien")
-#print(grid)
-#captain_found = False
-#bot_caught = False
-#for _ in range(1000):
-#    if bot_caught:
-#        break
-#    bot.move()
-#    if bot.ind == captain_ind:
-#        captain_found = True
-#        break
-#    for alien in aliens:
-#        if bot.ind == alien.ind:
-#            bot_caught = True
-#            break
-#        alien.move()
-#        if bot.ind == alien.ind:
-#            bot_caught = True
-#            print("Failure")
-#            break
-#    print("Next Iteration")
-#    #for alien in aliens:
-#    #    print(f"Alien {alien.alien_id} position: {alien.ind}")
-#    print(grid)
-#    sleep(0.016)
-#if captain_found:
-#    print("Success")
-#else:
-#    print("Failure")
 plt.style.use('ggplot')
 w = World(debug=False, jobs=12)
-w.gather_data(iters=120, K_range=(0, 400, 10), batch=20)
+w.gather_data(iters=24, K_range=(0, 400, 10), batch=20)
 w.plot_data()
-#sim_worst_case_bfs()
