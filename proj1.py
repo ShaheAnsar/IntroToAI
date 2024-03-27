@@ -24,13 +24,17 @@ NUM_BOTS=4
 COMPUTE_LIMIT=10000
 
 class GridAttrib:
-    __slots__ = ('open', 'bot_occupied', 'traversed', 'alien_id', 'captain_slot')
+    __slots__ = ('open', 'bot_occupied', 'traversed', 'alien_id',
+                 'captain_slot', 'crew_belief', 'alien_belief')
+
     def __init__(self):
         self.open = False
         self.bot_occupied = False
         self.traversed = False
         self.alien_id = -1
         self.captain_slot = False
+        self.crew_belief = 1.0 # Start out with a uniform belief of 1.0
+        self.alien_belief = 1.0 # Start out with a uniform belief of 1.0
 
 
 class Grid:
@@ -1053,7 +1057,7 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
     print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
 
 
-plt.style.use('ggplot')
-w = World(debug=False, jobs=1)
-w.gather_data(iters=100, K_range=(0, 100, 10), batch=20)
-w.plot_data()
+#plt.style.use('ggplot')
+#w = World(debug=False, jobs=1)
+#w.gather_data(iters=100, K_range=(0, 100, 10), batch=20)
+#w.plot_data()
