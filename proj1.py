@@ -190,8 +190,9 @@ class Grid:
             for i in range(self.D):
                 self.grid[j][i].traversed = False
 
-    def get_open_indices(self):
-        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i].open == True]
+    def get_open_indices(self) -> list:
+        return [(i, j) for i in range(self.D) for j in range(self.D) \
+                if self.grid[j][i].open == True]
 
     def get_unoccupied_open_indices(self):
         return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i].open == True and self.grid[j][i].alien_id == -1
