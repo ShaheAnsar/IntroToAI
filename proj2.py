@@ -7,7 +7,7 @@ from PIL import Image
 from collections import deque
 import os
 
-D=35
+D = 35
 COMPUTE_LIMIT = 5000
 
 class Grid2:
@@ -15,14 +15,37 @@ class Grid2:
         self._grid = Grid(D, debug=debug - 1>0)
         self.D = D
         self.grid = self._grid.grid
+
+        # initialize the beliefs here
+        self.beliefs = {}
+        open_cells = self._grid.get_unoccupied_open_indices()
+        sum = len(open_cells) * (len(open_cells) - 1) / 2
+        for one_cell in open_cells:
+            for two_cell in open_cells:
+                self.beliefs[(one_cell, two_cell)] = 1 / sum
+
+        # choose crew member positions
         self.crew_pos = rd.choice(self._grid.get_open_indices())
+        choice = rd.choice(self._grid.get_open_indices())
+        while choice == self.crew_pos:
+            choice = rd.choice(self._grid.get_open_indices())
+        self.crew_pos2 = choice
+
+    # manhattan distance calculator
     def distance(self, pos1, pos2):
         d = abs(pos1[1] - pos2[1])
         d += abs(pos1[0] - pos2[0])
         return d
+    
     def distance_to_crew(self, pos):
-        d = self.distance(self.crew_pos, pos)
-        return d
+        d1, d2 = None, None
+        if self.crew_pos is not None:
+            d1 = self.distance(self.crew_pos, pos)
+        if self.crew_pos2 is not None:
+            d2 = self.distance(self.crew_pos2, pos)
+        
+        return d1, d2
+        
 
 class bot1:
     def __init__(self, grid, alpha = 0.1, k=2, debug=1):
@@ -34,11 +57,20 @@ class bot1:
         self.debug=debug
         self.tick=0
         self.k=k
+        
 
     def crew_sensor(self):
         c = rd.random()
-        return c <= np.exp(-self.alpha
-                           * (self.grid.distance_to_crew(self.pos) - 1))
+        d1, d2 = self.grid.distance_to_crew(self.pos)
+        a, b = False, False
+
+        if d1 is not None:
+            a = c <= np.exp(-self.alpha * (d1 - 1))
+        if d2 is not None:
+            b = c <= np.exp(-self.alpha * (d2 - 1))
+
+        return a or b
+    
     def alien_sensor(self):
         found_alien = 0
         for j in range(-self.k, self.k + 1):
@@ -47,25 +79,56 @@ class bot1:
                     found_alien = 1
         return found_alien
 
-
+    # def belief_helper(self, beep):
+    #     # we're going to need a data structure here
+    #     # let's globally declare a dictionary and use that
+    #     pass
+        
+        
     def update_belief(self, beep, falien):
         # Crew Belief
-        generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
         open_cells = self.grid._grid.get_unoccupied_open_indices()
-        for ci in open_cells:
-            if ci == self.pos:
-                continue
-            gen_res = generative_fn(self.grid.distance(ci, self.pos))
-            if gen_res == 0:
-                pass
-                #print("DANGER!!!")
-                #print(f"Distance: {self.grid.distance(ci, self.pos)}, Beep: {beep}")
-            self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
-        # Normalize
-        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
-        belief_sum = sum(flat_beliefs)
-        for ci in open_cells:
-            self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+        for one_cell in open_cells:
+            for two_cell in open_cells:
+                if one_cell == two_cell:
+                    continue
+                if self.grid.beliefs[(one_cell, two_cell)] == 0:
+                    continue
+                
+                generative_fn = lambda x: np.exp(-self.alpha * (x - 1)) if beep else (1 - (np.exp(-self.alpha) * (x - 1)))
+                p_beep = lambda x: np.exp(-self.alpha * (x - 1))
+
+                # probability of crew at one_cell
+                gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos))
+                # probability of crew at two_cell
+                gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
+
+                # probability of beep given crew at one_cell and crew at two_cell
+                total_prob = p_beep(self.grid.distance(one_cell, self.pos)) \
+                    * p_beep(self.grid.distance(two_cell, self.pos)) \
+                    * gen_crew_one * gen_crew_two
+
+                # now we store this probability in our belief matrix
+                # TODO: MAKE SURE TO DOUBLE CHECK THE MULTIPLICATION HERE
+                self.grid.beliefs[(one_cell, two_cell)] *= total_prob
+                
+
+        # generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
+        # open_cells = self.grid._grid.get_unoccupied_open_indices()
+        # for ci in open_cells:
+        #     if ci == self.pos:
+        #         continue
+        #     gen_res = generative_fn(self.grid.distance(ci, self.pos))
+        #     if gen_res == 0:
+        #         pass
+        #         #print("DANGER!!!")
+        #         #print(f"Distance: {self.grid.distance(ci, self.pos)}, Beep: {beep}")
+        #     self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
+        # # Normalize
+        # flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+        # belief_sum = sum(flat_beliefs)
+        # for ci in open_cells:
+        #     self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
 
         # Alien Belief
 
@@ -119,7 +182,7 @@ class bot1:
             print("Planned Path")
 
     def move(self):
-        self.update_belief(self.crew_sensor())
+        self.update_belief(self.crew_sensor(), 1)
 
         neighbors = self.grid._grid.get_open_neighbors(self.pos)
         neighbors = [n for n in neighbors if not self.grid.crew_pos == n]

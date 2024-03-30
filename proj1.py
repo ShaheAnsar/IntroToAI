@@ -1054,7 +1054,7 @@ def sim_worst_case_bfs(const_func = lambda x : sleep(0.0005)):
                 parent_map[n] = ind
             const_func(ind)
             fringe.extend(neighbors)
-    print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
+    # print(f"Overall Time Taken for 1000 worst case BFSes: {end_time - start_time}")
 
 
 #plt.style.use('ggplot')
