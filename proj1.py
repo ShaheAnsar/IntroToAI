@@ -13,11 +13,6 @@ import multiprocessing as mp
 from multiprocessing import Pool
 import time
 
-
-
-
-
-
 # Total number of Bot Types
 NUM_BOTS=4
 # Computer Limit
@@ -260,8 +255,6 @@ class PathTreeNode:
         self.children = []
         self.parent = None
         self.data = None
-
-
 
 class Bot1:
     def __init__(self, grid, captain_ind, debug=True):
