@@ -59,7 +59,7 @@ class bot1:
         self.debug=debug
         self.tick=0
         self.k=k
-        self.found = 0
+        self.found = False
 
     def crew_sensor(self):
         c = rd.random()
@@ -204,8 +204,12 @@ class bot1:
             for key, _ in self.grid.beliefs.items():
                 if self.pos in key:
                     self.grid.beliefs[key] = 0
-        else:
-            self.found += 1
+        elif self.pos == self.grid.crew_pos:
+            self.grid.crew_pos = None
+            self.found = True
+        elif self.pos == self.grid.crew_pos2:
+            self.grid.crew_pos2 = None
+            self.found = True
 
         self.tick += 1
         #possible_dir = self.grid.get_open_neighbors(self.pos)
