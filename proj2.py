@@ -80,6 +80,27 @@ class bot1:
                 if self.grid.grid[j][i].alien_id != -1:
                     found_alien = 1
         return found_alien        
+    
+    def update_helper(self, crew_member: int):
+        '''
+            this resets the probability after one of the crew members has been found
+        '''
+        crew = None
+        if crew_member == 1:
+            crew = self.grid.crew_pos
+        elif crew_member == 2:
+            crew = self.grid.crew_pos2
+
+        # now we have to remove all the dict keys that don't have this crew coordinate
+        remove_keys_list = self.grid.beliefs.keys()
+        remove_keys_list = [key for key in remove_keys_list if crew not in key]
+        for key in remove_keys_list:
+            del self.grid.beliefs[key]
+
+        # now that we've removed the keys without the crew member, we need to normalize the probabilities remaining
+        sum_beliefs = sum(self.grid.beliefs.values())
+        for key, _ in self.grid.beliefs.items():
+            self.grid.beliefs[key] *= 1 / sum_beliefs
         
     def update_belief(self, beep, falien):
         # Crew Belief
@@ -104,26 +125,6 @@ class bot1:
         sum_beliefs = sum(self.grid.beliefs.values())
         for key, value in self.grid.beliefs.items():
             self.grid.beliefs[key] = value / sum_beliefs
-                
-
-        # generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
-        # open_cells = self.grid._grid.get_unoccupied_open_indices()
-        # for ci in open_cells:
-        #     if ci == self.pos:
-        #         continue
-        #     gen_res = generative_fn(self.grid.distance(ci, self.pos))
-        #     if gen_res == 0:
-        #         pass
-        #         #print("DANGER!!!")
-        #         #print(f"Distance: {self.grid.distance(ci, self.pos)}, Beep: {beep}")
-        #     self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
-        # # Normalize
-        # flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
-        # belief_sum = sum(flat_beliefs)
-        # for ci in open_cells:
-        #     self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
-
-        # Alien Belief
 
     def plan_path(self, dest):
         if self.debug:
@@ -204,12 +205,13 @@ class bot1:
             for key, _ in self.grid.beliefs.items():
                 if self.pos in key:
                     self.grid.beliefs[key] = 0
-        elif self.pos == self.grid.crew_pos:
+        
+        if self.pos == self.grid.crew_pos:
+            self.update_helper(1)
             self.grid.crew_pos = None
-            self.found = True
         elif self.pos == self.grid.crew_pos2:
+            self.update_helper(2)
             self.grid.crew_pos2 = None
-            self.found = True
 
         self.tick += 1
         #possible_dir = self.grid.get_open_neighbors(self.pos)
