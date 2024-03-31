@@ -13,11 +13,6 @@ import multiprocessing as mp
 from multiprocessing import Pool
 import time
 
-
-
-
-
-
 # Total number of Bot Types
 NUM_BOTS=4
 # Computer Limit
