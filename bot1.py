@@ -25,7 +25,7 @@ class Grid2:
         return d
 
 class bot1:
-    def __init__(self, grid, alpha = 0.1, k=2, debug=1):
+    def __init__(self, grid, alpha = 0.08, k=2, debug=1):
         self.grid = grid
         self.pos = None
         while self.pos == self.grid.crew_pos or self.pos is None:
