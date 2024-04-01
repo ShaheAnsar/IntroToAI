@@ -13,15 +13,9 @@ COMPUTE_LIMIT = 5000
 '''
     # TODO
     after creating the divisions grid, we're going to need a few more things:
-        - we need a way to translate our coordinates to grid coordinates, which is simple
-          just divide by 7 and use those as the x-y coordinates
-        - translate from grid coordinates back to bot coordinates, now this is slightly more
-          complicated
+        - when the bot has to move, change the syntax to get the dest_cell from the created functions
+        - for the step above, create more functions if needed
         - path planning, that muzzammil should take care of
-        - function to change the divided grid belief based on the crew_belief
-        - once you go into the grid, you have to go to the individual cells too
-          so you have to think of something for that (just go to the individual open cells mp)
-        
 '''
 
 class Grid2:
