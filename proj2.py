@@ -99,42 +99,32 @@ class bot1:
 
         # now that we've removed the keys without the crew member, we need to normalize the probabilities remaining
         sum_beliefs = sum(self.grid.beliefs.values())
-        print(f"the sum of beliefs is {sum_beliefs}")
         for key, _ in self.grid.beliefs.items():
             self.grid.beliefs[key] *= 1 / sum_beliefs
-            print(f"beliefs after normalization: {self.grid.beliefs[key]}")
-        sum_beliefs = sum(self.grid.beliefs.values())
-        print(f"the sum of beliefs is {sum_beliefs}")
         
     def update_belief(self, beep, falien):
         # Crew Belief
         generative_fn = lambda x: np.exp(-self.alpha * (x - 1)) if beep else (1 - (np.exp(-self.alpha * (x - 1))))
         
         sum_beliefs = sum(self.grid.beliefs.values())
-        print(f"1. update belief function, sum of beliefs : {sum_beliefs}")
         
         for key, _ in self.grid.beliefs.items():
             one_cell, two_cell = key
+            gen_crew_one, gen_crew_two = 0, 0
 
-            # probability of crew at one_cell
-            gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos)) \
-                                if one_cell != self.found_crew else 1
-            # probability of crew at two_cell
-            gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos)) \
-                                if two_cell != self.found_crew else 1
+            if self.found_crew != one_cell:
+                gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos))
+            
+            if self.found_crew != two_cell:
+                gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
 
-            # total_prob = generative_fn(self.grid.distance(one_cell, self.pos)) \
-            #     * generative_fn(self.grid.distance(two_cell, self.pos)) \
-            #     * gen_crew_one * gen_crew_two
-
-            total_prob = gen_crew_one * gen_crew_two
+            total_prob = gen_crew_one + gen_crew_two
             
             # TODO: MAKE SURE TO DOUBLE CHECK THE MULTIPLICATION HERE
             self.grid.beliefs[(one_cell, two_cell)] *= total_prob
 
         # let's normalize this
         sum_beliefs = sum(self.grid.beliefs.values())
-        print(f"2. update belief function, sum of beliefs : {sum_beliefs}")
         for key, value in self.grid.beliefs.items():
             self.grid.beliefs[key] = value / sum_beliefs
 
@@ -149,7 +139,6 @@ class bot1:
         self.grid._grid.remove_bot(self.pos)
         # dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
         max_belief = max(self.grid.beliefs.values())
-        print(f"The current position is {self.pos}, max belief is : {max_belief}")
         position = [key for key in self.grid.beliefs.keys() if self.grid.beliefs[key] == max_belief][0]
         dest_cell = min(position[0], position[1], 
                         key=lambda x: abs(x[0] - self.pos[0]) + abs(x[1] - self.pos[1])
@@ -163,10 +152,9 @@ class bot1:
         else:
             self.pos = neighbors[-1]
         self.grid._grid.place_bot(self.pos)
-        print(f"The new position is {self.pos}")
 
-        if (self.grid.crew_pos is None or self.pos != self.grid.crew_pos) \
-            and (self.grid.crew_pos2 is None or self.pos != self.grid.crew_pos2):
+        if (self.pos != self.found_crew) and \
+            (self.pos != self.grid.crew_pos) and (self.pos != self.grid.crew_pos2):
             self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
             for key, _ in self.grid.beliefs.items():
                 if self.pos in key:
