@@ -10,16 +10,37 @@ import os
 D=35
 COMPUTE_LIMIT = 5000
 
+'''
+    after creating the divisions grid, we're going to need a few more things:
+        - we need a way to translate our coordinates to grid coordinates, which is simple
+          just divide by 7 and use those as the x-y coordinates
+        - translate from grid coordinates back to bot coordinates, now this is slightly more
+          complicated
+        - path planning, that muzzammil should take care of
+        - function to change the divided grid belief based on the crew_belief
+        - once you go into the grid, you have to go to the individual cells too
+          so you have to think of something for that (just go to the individual cells mp)
+        - 
+'''
+
 class Grid2:
     def __init__(self, D=35, debug=1):
         self._grid = Grid(D, debug=debug - 1>0)
         self.D = D
         self.grid = self._grid.grid
         self.crew_pos = rd.choice(self._grid.get_open_indices())
+        
+        # let's divide the 35x35 grid into smaller 5x5 grids
+        # we're going to keep a 2-d array for keeping track of the total probability of these cells
+        # there are going to be 49 divisions, from index 0-4, 5-9, ...
+        # so what we have to do is create a sqrt(49) x sqrt(49) 2-d grid
+        self.divisions = [[1.0 for i in range(7)] for i in range(7)]
+
     def distance(self, pos1, pos2):
         d = abs(pos1[1] - pos2[1])
         d += abs(pos1[0] - pos2[0])
         return d
+    
     def distance_to_crew(self, pos):
         d = self.distance(self.crew_pos, pos)
         return d
@@ -49,7 +70,10 @@ class bot1:
 
 
     def update_belief(self, beep, falien):
-        # Crew Belief
+        '''
+            updates crew belief (depending on whether or not the beep is heard) every time its called (which 
+            should be every time the bot moves).
+        '''
         generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
         open_cells = self.grid._grid.get_unoccupied_open_indices()
 
@@ -73,9 +97,10 @@ class bot1:
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
 
-        # Alien Belief
-
     def plan_path(self, dest):
+        '''
+            this function plans the path to the destination cell
+        '''
         if self.debug:
             print("Planning Path...")  # If path is empty we plan one
         self.path = deque([])
@@ -178,6 +203,7 @@ def plot_world_state(grid, bot):
                 grid_img[-1].append(white)
     plt.imshow(grid_img)
     #plt.show()
+
 g = Grid2()
 b = bot1(g)
 MAX_TURNS = 200
