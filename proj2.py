@@ -17,6 +17,7 @@ COMPUTE_LIMIT = 5000
         - for the step above, create more functions if needed
         - path planning, that muzzammil should take care of
         - normalize by distance (?)
+        - change the existing functions to account for this sub-grid system
 '''
 
 class Grid2:
@@ -64,8 +65,10 @@ class bot1:
         return found_alien
     
     def find_upper_and_lower(self, grid_x, grid_y):
-        upper_x, lower_x = abs((grid_x * 5) - 1), grid_x * 4
-        upper_y, lower_y = abs((grid_y * 5) - 1), grid_y * 4
+        upper_x = (grid_x * 7) + 6
+        lower_x = upper_x - 6
+        upper_y,  = (grid_y * 7) + 6
+        lower_y = upper_y - 6
         return ((upper_x, lower_x), (upper_y, lower_y))
     
     def sub_max_belief(self):
@@ -74,34 +77,51 @@ class bot1:
         '''
         max_x, max_y = -1, -1
         maxi = -1
+        flag = False
 
         # TODO: normalize for distance
-        for y in self.divisions:
-            for x in y:
-                divs = self.divisions[y][x]
-                if divs != 0 and divs > maxi:
-                    maxi = self.divisions[y][x]
-                    max_x, max_y = x, y
+        for j, y in enumerate(self.divisions):
+            for i, x in enumerate(y):
+                divs = self.divisions[j][i]
+
+                (old_upper_x, old_lower_x), (old_upper_y, old_lower_y) = self.find_upper_and_lower(max_x, max_y)
+
+                if max_x != -1 or flag == False:
+                    old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
+                    old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
+                    maxi /= old_distance
+                    flag = True
+
+                (new_upper_x, new_lower_x), (new_upper_y, new_lower_y) = self.find_upper_and_lower(i, j)
+                new_mid_x, new_mid_y = (new_upper_x + new_lower_x) / 2, (new_upper_y + new_lower_y) / 2
+
+                new_distance = self.grid.distance((new_mid_x, new_mid_y), self.pos)
+
+                curr_iter_grid_prob = divs / new_distance
+
+                if curr_iter_grid_prob > maxi and divs != 0:
+                    maxi = self.divisions[j][i]
+                    max_x, max_y = i, j
+                    flag = False
 
                 elif divs == maxi:
                     # get the least traversed grid with the lowest neighbor belief
                     old_traversed, new_traversed = 0, 0
-                    
-                    (old_upper_x, old_lower_x), (old_upper_y, old_lower_y) = self.find_upper_and_lower(max_x, max_y)
-                    (new_upper_x, new_lower_x), (new_upper_y, new_lower_y) = self.find_upper_and_lower(x, y)
 
-                    for x in range(old_lower_x, old_upper_x + 1):
-                        for y in range(old_lower_y, old_upper_y + 1):
-                            if self.grid.grid[y][x].traversed == True:
+                    for x1 in range(old_lower_x, old_upper_x + 1):
+                        for y1 in range(old_lower_y, old_upper_y + 1):
+                            if self.grid.grid[y1][x1].traversed == True:
                                 old_traversed += 1
 
-                    for x in range(new_lower_x, new_upper_x + 1):
-                        for y in range(new_lower_y, new_upper_y + 1):
-                            if self.grid.grid[y][x].traversed == True:
+                    for x1 in range(new_lower_x, new_upper_x + 1):
+                        for y1 in range(new_lower_y, new_upper_y + 1):
+                            if self.grid.grid[y1][x1].traversed == True:
                                 new_traversed += 1
 
                     if new_traversed < old_traversed:
-                        max_x, max_y = x, y
+                        max_x, max_y = i, j
+                        flag = False
+
                     elif new_traversed == old_traversed:
                         # i want to check the neighboring diagonal sub-grids for their probabilities
                         # let's check it for the current cell first
@@ -120,39 +140,31 @@ class bot1:
                             curr_max_div_belief += self.divisions[dy][dx]
 
                         if curr_max_diagonals < new_div_belief:
-                            max_x, max_y = x, y
+                            max_x, max_y = i, j
                         elif curr_max_diagonals == new_div_belief:
-                            max_x, max_y = rd.choice(((x, y), (max_x, max_y)))
-                #     new_mid_x, new_mid_y = (new_upper_x + new_lower_x) / 2, (new_upper_y + new_lower_y) / 2
-                #     new_dist = self.grid.distance((new_mid_x, new_mid_y), (self.pos[0], self.pos[1]))
+                            max_x, max_y = rd.choice(((i, j), (max_x, max_y)))
 
-                #     old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
-                #     old_dist = self.grid.distance((old_mid_x, old_mid_y), (self.pos[0], self.pos[1]))
-
-                #     if new_dist < old_dist:
-                #         max_x, max_y = x, y
-                #     elif new_dist == old_dist:
-                #         # i want a way to find out which one is more worth going to
-                #         # maybe seeing the neighboring grids?
-                #         pass
-                    
-        # a very rare edge case
-        if maxi == -1:
-            # move to random neighbor cell
-            neighbor = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-            open_neighbors = [n for n in neighbor if self.grid.grid[self.pos[1] - n[0]][self.pos[0] - n[1]].open == True]
-            max_x, max_y = rd.choice(open_neighbors)
-            maxi = 0
+                        flag = False
                     
         return [maxi, (max_x, max_y)]
 
     def bot_division(self):
         '''
             returns (x, y) coordinates of the sub-grid to head to
-            get the upper and lower bounds of the grid and find the middle spot there(?)
+            get the upper and lower bounds of the grid and head to the center of that grid
         '''
         # n and n - 1, n = 5
         max_belief, grid_coor = self.sub_max_belief()
+
+        if max_belief == 0:
+            # move to random neighbor cell
+            neighbor = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            open_neighbors = [n for n in neighbor if self.grid.grid[self.pos[1] - n[0]][self.pos[0] - n[1]].open == True]
+            max_x, max_y = rd.choice(open_neighbors)
+            maxi = 0
+
+            return (max_x, max_y)
+
         (upper_x, lower_x), (upper_y, lower_y) = self.find_upper_and_lower(grid_coor[0], grid_coor[1])
 
         # what if the bot is already in the sub-grid?
@@ -205,6 +217,23 @@ class bot1:
         # print(f"2. update belief function, sum of beliefs : {belief_sum}")
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+
+        for j, y in enumerate(self.divisions):
+            for i, x in enumerate(y):
+                (old_upper_x, old_lower_x), (old_upper_y, old_lower_y) = self.find_upper_and_lower(i, j)
+                probability = 0
+                num_open_cells = 0
+
+                print(old_lower_x, old_upper_x, old_lower_y, old_upper_y)
+
+                for x1 in range(old_lower_x, old_upper_x + 1):
+                    for y1 in range(old_lower_y, old_upper_y + 1):
+                        if self.grid.grid[y1][x1].open == True:
+                            num_open_cells += 1
+                            probability += self.grid.grid[y1][x1].crew_belief
+
+                self.divisions[j][i] = probability / num_open_cells
+                
 
     def plan_path(self, dest):
         '''
@@ -262,12 +291,13 @@ class bot1:
         self.update_belief(self.crew_sensor(), 1)
 
         neighbors = self.grid._grid.get_open_neighbors(self.pos)
-        neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
+        # neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
         neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
         open_cells = self.grid._grid.get_unoccupied_open_indices()
 
         self.grid._grid.remove_bot(self.pos)
-        dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        # dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        max_belief, dest_cell = self.bot_division()
         self.plan_path(dest_cell)
         if len(self.path) != 0:
             self.pos = self.path[0]
