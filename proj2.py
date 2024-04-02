@@ -65,10 +65,9 @@ class bot1:
         return found_alien
     
     def find_upper_and_lower(self, grid_x, grid_y):
-        upper_x = (grid_x * 7) + 6
-        lower_x = upper_x - 6
-        upper_y,  = (grid_y * 7) + 6
-        lower_y = upper_y - 6
+        upper_x, lower_x = (grid_x * 7) + 6, grid_x * 7
+        upper_y, lower_y = (grid_y * 7) + 6, grid_y * 7
+        
         return ((upper_x, lower_x), (upper_y, lower_y))
     
     def sub_max_belief(self):
