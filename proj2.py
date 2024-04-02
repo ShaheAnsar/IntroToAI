@@ -170,7 +170,6 @@ class bot1:
         else:
             alien_choose_fun = lambda x: not self.within_alien_sensor(x)
         self.diffuse_alien_prob(alien_choose_fun)
-        alien_choose_fun = lambda x: self.within_alien_sensor(x) if falien else lambda x: not self.within_alien_sensor(x)
         self.restrict_alien_prob(alien_choose_fun)
         print("Alien detected" if falien else "Alien Not Detected")
         #alien
