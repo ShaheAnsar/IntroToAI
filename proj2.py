@@ -72,16 +72,18 @@ class bot1:
         '''
             returns the next sub-grid to go to
         '''
-        max_x, max_y = 0, 0
-        maxi = 0
+        max_x, max_y = -1, -1
+        maxi = -1
 
+        # TODO: normalize for distance
         for y in self.divisions:
             for x in y:
-                if self.divisions[y][x] > maxi:
+                divs = self.divisions[y][x]
+                if divs != 0 and divs > maxi:
                     maxi = self.divisions[y][x]
                     max_x, max_y = x, y
 
-                elif self.divisions[y][x] == maxi and maxi != 0:
+                elif divs == maxi:
                     # get the least traversed grid with the lowest neighbor belief
                     old_traversed, new_traversed = 0, 0
                     
@@ -90,18 +92,37 @@ class bot1:
 
                     for x in range(old_lower_x, old_upper_x + 1):
                         for y in range(old_lower_y, old_upper_y + 1):
-                            if self.grid.grid[x][y].traversed == True:
+                            if self.grid.grid[y][x].traversed == True:
                                 old_traversed += 1
 
                     for x in range(new_lower_x, new_upper_x + 1):
                         for y in range(new_lower_y, new_upper_y + 1):
-                            if self.grid.grid[x][y].traversed == True:
+                            if self.grid.grid[y][x].traversed == True:
                                 new_traversed += 1
 
                     if new_traversed < old_traversed:
                         max_x, max_y = x, y
                     elif new_traversed == old_traversed:
-                        pass
+                        # i want to check the neighboring diagonal sub-grids for their probabilities
+                        # let's check it for the current cell first
+                        diagonals = [(1, 1), (1, -1), (-1, 1), (-1, -1)]
+                        is_valid = lambda x, y: (x, y) if (0 <= x <= 4) and (0 <= y <= 4) else None
+                        new_diagonals = [(x + d[0], y + d[1]) for d in diagonals if is_valid(x + d[0], y + d[1]) is not None]
+                        new_div_belief, curr_max_div_belief = 0, 0
+
+                        for dx, dy in new_diagonals:
+                            new_div_belief += self.divisions[dy][dx]
+                        
+                        curr_max_diagonals = [(max_x + d[0], max_y + d[1]) for d in diagonals \
+                                              if is_valid(max_x + d[0], max_y + d[1]) is not None]
+                        
+                        for dx, dy in curr_max_diagonals:
+                            curr_max_div_belief += self.divisions[dy][dx]
+
+                        if curr_max_diagonals < new_div_belief:
+                            max_x, max_y = x, y
+                        elif curr_max_diagonals == new_div_belief:
+                            max_x, max_y = rd.choice(((x, y), (max_x, max_y)))
                 #     new_mid_x, new_mid_y = (new_upper_x + new_lower_x) / 2, (new_upper_y + new_lower_y) / 2
                 #     new_dist = self.grid.distance((new_mid_x, new_mid_y), (self.pos[0], self.pos[1]))
 
@@ -114,6 +135,14 @@ class bot1:
                 #         # i want a way to find out which one is more worth going to
                 #         # maybe seeing the neighboring grids?
                 #         pass
+                    
+        # a very rare edge case
+        if maxi == -1:
+            # move to random neighbor cell
+            neighbor = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            open_neighbors = [n for n in neighbor if self.grid.grid[self.pos[1] - n[0]][self.pos[0] - n[1]].open == True]
+            max_x, max_y = rd.choice(open_neighbors)
+            maxi = 0
                     
         return [maxi, (max_x, max_y)]
 
