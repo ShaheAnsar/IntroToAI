@@ -16,6 +16,7 @@ COMPUTE_LIMIT = 5000
         - when the bot has to move, change the syntax to get the dest_cell from the created functions
         - for the step above, create more functions if needed
         - path planning, that muzzammil should take care of
+        - normalize by distance (?)
 '''
 
 class Grid2:
@@ -62,17 +63,58 @@ class bot1:
                     found_alien = 1
         return found_alien
     
+    def find_upper_and_lower(self, grid_x, grid_y):
+        upper_x, lower_x = abs((grid_x * 5) - 1), grid_x * 4
+        upper_y, lower_y = abs((grid_y * 5) - 1), grid_y * 4
+        return ((upper_x, lower_x), (upper_y, lower_y))
+    
     def sub_max_belief(self):
         '''
-            returns the sub-grid with the highest probability
+            returns the next sub-grid to go to
         '''
         max_x, max_y = 0, 0
         maxi = 0
+
         for y in self.divisions:
             for x in y:
                 if self.divisions[y][x] > maxi:
                     maxi = self.divisions[y][x]
                     max_x, max_y = x, y
+
+                elif self.divisions[y][x] == maxi and maxi != 0:
+                    # get the least traversed grid with the lowest neighbor belief
+                    old_traversed, new_traversed = 0, 0
+                    
+                    (old_upper_x, old_lower_x), (old_upper_y, old_lower_y) = self.find_upper_and_lower(max_x, max_y)
+                    (new_upper_x, new_lower_x), (new_upper_y, new_lower_y) = self.find_upper_and_lower(x, y)
+
+                    for x in range(old_lower_x, old_upper_x + 1):
+                        for y in range(old_lower_y, old_upper_y + 1):
+                            if self.grid.grid[x][y].traversed == True:
+                                old_traversed += 1
+
+                    for x in range(new_lower_x, new_upper_x + 1):
+                        for y in range(new_lower_y, new_upper_y + 1):
+                            if self.grid.grid[x][y].traversed == True:
+                                new_traversed += 1
+
+                    if new_traversed < old_traversed:
+                        max_x, max_y = x, y
+                    elif new_traversed == old_traversed:
+                        pass
+                #     new_mid_x, new_mid_y = (new_upper_x + new_lower_x) / 2, (new_upper_y + new_lower_y) / 2
+                #     new_dist = self.grid.distance((new_mid_x, new_mid_y), (self.pos[0], self.pos[1]))
+
+                #     old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
+                #     old_dist = self.grid.distance((old_mid_x, old_mid_y), (self.pos[0], self.pos[1]))
+
+                #     if new_dist < old_dist:
+                #         max_x, max_y = x, y
+                #     elif new_dist == old_dist:
+                #         # i want a way to find out which one is more worth going to
+                #         # maybe seeing the neighboring grids?
+                #         pass
+                    
         return [maxi, (max_x, max_y)]
 
     def bot_division(self):
@@ -82,8 +124,7 @@ class bot1:
         '''
         # n and n - 1, n = 5
         max_belief, grid_coor = self.sub_max_belief()
-        upper_x, lower_x = abs((grid_coor[0] * 5) - 1), grid_coor[0] * 4
-        upper_y, lower_y = abs((grid_coor[1] * 5) - 1), grid_coor[1] * 4
+        (upper_x, lower_x), (upper_y, lower_y) = self.find_upper_and_lower(grid_coor[0], grid_coor[1])
 
         # what if the bot is already in the sub-grid?
         if (lower_x <= self.pos[1] <= upper_x) and (lower_y <= self.pos[0] <= upper_y):
