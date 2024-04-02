@@ -61,6 +61,44 @@ class bot1:
                     found_alien = 1
                     break
         return found_alien == 1
+    
+    def diffuse_alien_prob(self, choose_fun):
+        open_cells = self.grid._grid.get_open_indices()
+        filtered_open_cells = [oc for oc in open_cells if choose_fun(oc)]
+        alien_belief = np.zeros((self.grid.D, self.grid.D))
+        for ci in filtered_open_cells:
+            neighbors = self.grid._grid.get_neighbors(ci)
+            neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n)]
+            # Diffuse the probability at the current square into the
+            # neighbors that the alien can move to
+            for n in neighbors:
+                alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
+        # Normalizs
+        total_belief = np.sum(alien_belief)
+        for ci in open_cells:
+            alien_belief[ci[1]][ci[0]] /= total_belief
+        # Update the original probabilities
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
+
+    def restrict_alien_prob(self, choose_fun):
+        open_cells = self.grid._grid.get_open_indices()
+        for i in open_cells:
+            if not choose_fun(i):
+                print("Seems to work")
+        filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
+        print(f"Cells to set to 0: {len(filtered_open_cells)}")
+        for ci in filtered_open_cells:
+            print("Setting to 0")
+            self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
+        total_belief = 0
+        for ci in open_cells:
+            total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
+        # Normalize probabilities
+
+
 
     def update_belief(self, beep, falien):
         # Crew Belief
@@ -86,36 +124,57 @@ class bot1:
         # If there is no detection, we diffuse everything outside of the detection square
         # If there is a detection, we set everything outside the square to 0 and leave
         # everything inside the square as is
+        alien_belief = np.zeros(( self.grid.D, self.grid.D ))
+        #if falien:
+        #    print("Detected Alien!")
+        #    for j in range(0, self.grid.D):
+        #        for i in range(0, self.grid.D):
+        #            # If not within the square, set it to 0
+        #            if not self.within_alien_sensor((i,j)):
+        #                self.grid.grid[j][i].alien_belief = 0.0
+        #            elif self.grid.grid[j][i].open:
+        #                neighbors = self.grid._grid.get_neighbors((i,j))
+        #                neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and self.within_alien_sensor(n)]
+        #                # Diffuse the probability at the current square into the
+        #                # neighbors that the alien can move to
+        #                for n in neighbors:
+        #                    alien_belief[n[1]][n[0]] += self.grid.grid[j][i].alien_belief/len(neighbors)
+
+        #    # Normalize
+        #    total_belief = 0
+        #    for ci in open_cells:
+        #        total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
+        #    for ci in open_cells:
+        #        self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
+        #    for ci in open_cells:
+        #        self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
+        #else:
+        #    print("Did not Detect Alien!")
+        #    for ci in open_cells:
+        #        neighbors = self.grid._grid.get_neighbors(ci)
+        #        neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and not self.within_alien_sensor(n)]
+        #        # Diffuse the probability at the current square into the
+        #        # neighbors that the alien can move to
+        #        for n in neighbors:
+        #            alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
+        #    # Normalizs
+        #    total_belief = np.sum(alien_belief)
+        #    for ci in open_cells:
+        #        alien_belief[ci[1]][ci[0]] /= total_belief
+        #    # Update the original probabilities
+        #    for ci in open_cells:
+        #        self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
+        alien_choose_fun = None
         if falien:
-            print("Detected Alien!")
-            for j in range(0, self.grid.D):
-                for i in range(0, self.grid.D):
-                    # If not within the square, set it to 0
-                    if not self.within_alien_sensor((i,j)):
-                        self.grid.grid[j][i].alien_belief = 0.0
-            # Normalize
-            total_belief = 0
-            for ci in open_cells:
-                total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
-            for ci in open_cells:
-                self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
+            alien_choose_fun = lambda x: self.within_alien_sensor(x)
         else:
-            print("Did not Detect Alien!")
-            alien_belief = np.zeros(( self.grid.D, self.grid.D ))
-            for ci in open_cells:
-                neighbors = self.grid._grid.get_neighbors(ci)
-                neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and not self.within_alien_sensor(n)]
-                # Diffuse the probability at the current square into the
-                # neighbors that the alien can move to
-                for n in neighbors:
-                    alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
-            # Normalizs
-            total_belief = np.sum(alien_belief)
-            for ci in open_cells:
-                alien_belief[ci[1]][ci[0]] /= total_belief
-            # Update the original probabilities
-            for ci in open_cells:
-                self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
+            alien_choose_fun = lambda x: not self.within_alien_sensor(x)
+        self.diffuse_alien_prob(alien_choose_fun)
+        alien_choose_fun = lambda x: self.within_alien_sensor(x) if falien else lambda x: not self.within_alien_sensor(x)
+        self.restrict_alien_prob(alien_choose_fun)
+        print("Alien detected" if falien else "Alien Not Detected")
+        #alien
+
                 
 
 
