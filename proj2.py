@@ -38,6 +38,10 @@ class bot1:
     def within_alien_sensor(self, pos):
         return abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) <= self.k
 
+    def alien_sensor_edge(self, pos, offset):
+        return ( abs(pos[0] - self.pos[0]) == self.k + offset and abs(pos[1] - self.pos[1]) <= self.k ) or (abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) == self.k + offset)
+
+ 
     def crew_sensor(self):
         c = rd.random()
         return c <= np.exp(-self.alpha
@@ -62,13 +66,40 @@ class bot1:
                     break
         return found_alien == 1
     
-    def diffuse_alien_prob(self, choose_fun):
+    #def diffuse_alien_prob(self, choose_fun):
+    #    open_cells = self.grid._grid.get_open_indices()
+    #    filtered_open_cells = [oc for oc in open_cells if choose_fun(oc)]
+    #    alien_belief = np.zeros((self.grid.D, self.grid.D))
+    #    for ci in filtered_open_cells:
+    #        neighbors = self.grid._grid.get_neighbors(ci)
+    #        neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n)]
+    #        # Diffuse the probability at the current square into the
+    #        # neighbors that the alien can move to
+    #        for n in neighbors:
+    #            alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
+    #    # Normalizs
+    #    total_belief = np.sum(alien_belief)
+    #    for ci in open_cells:
+    #        alien_belief[ci[1]][ci[0]] /= total_belief
+    #    # Update the original probabilities
+    #    for ci in open_cells:
+    #        self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
+    def diffuse_alien_prob(self, alien_found):
+        choose_fun = None
+        if alien_found:
+            choose_fun = lambda x: self.within_alien_sensor(x)
+        else:
+            choose_fun = lambda x: not self.within_alien_sensor(x)
         open_cells = self.grid._grid.get_open_indices()
-        filtered_open_cells = [oc for oc in open_cells if choose_fun(oc)]
+        # Cells inside the alien sensor and just outside
+        # The probability will diffuse among these
+        filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else -1) )]
         alien_belief = np.zeros((self.grid.D, self.grid.D))
+
+        # Diffuse through the edge cells
         for ci in filtered_open_cells:
             neighbors = self.grid._grid.get_neighbors(ci)
-            neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n)]
+            neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n) ]
             # Diffuse the probability at the current square into the
             # neighbors that the alien can move to
             for n in neighbors:
@@ -81,7 +112,29 @@ class bot1:
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
 
-    def restrict_alien_prob(self, choose_fun):
+    #def restrict_alien_prob(self, choose_fun):
+    #    open_cells = self.grid._grid.get_open_indices()
+    #    for i in open_cells:
+    #        if not choose_fun(i):
+    #            print("Seems to work")
+    #    filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
+    #    print(f"Cells to set to 0: {len(filtered_open_cells)}")
+    #    for ci in filtered_open_cells:
+    #        print("Setting to 0")
+    #        self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
+    #    total_belief = 0
+    #    for ci in open_cells:
+    #        total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
+    #    for ci in open_cells:
+    #        self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
+        # Normalize probabilities
+    def restrict_alien_prob(self, alien_found):
+        choose_fun = None
+        if alien_found:
+            choose_fun = lambda x: self.within_alien_sensor(x)
+        else:
+            choose_fun = lambda x: not self.within_alien_sensor(x)
+
         open_cells = self.grid._grid.get_open_indices()
         for i in open_cells:
             if not choose_fun(i):
@@ -91,16 +144,16 @@ class bot1:
         for ci in filtered_open_cells:
             print("Setting to 0")
             self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
+        # Normalize
         total_belief = 0
         for ci in open_cells:
             total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
-        # Normalize probabilities
 
 
 
-    def update_belief(self, beep, falien):
+    def update_belief(self, beep, alien_found):
         # Crew Belief
         generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
         open_cells = self.grid._grid.get_open_indices()
@@ -164,14 +217,9 @@ class bot1:
         #    # Update the original probabilities
         #    for ci in open_cells:
         #        self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
-        alien_choose_fun = None
-        if falien:
-            alien_choose_fun = lambda x: self.within_alien_sensor(x)
-        else:
-            alien_choose_fun = lambda x: not self.within_alien_sensor(x)
-        self.diffuse_alien_prob(alien_choose_fun)
-        self.restrict_alien_prob(alien_choose_fun)
-        print("Alien detected" if falien else "Alien Not Detected")
+        self.diffuse_alien_prob(alien_found)
+        self.restrict_alien_prob(alien_found)
+        print("Alien detected" if alien_found else "Alien Not Detected")
         #alien
 
                 
@@ -262,6 +310,7 @@ def plot_world_state(grid, bot):
     black = [0., 0., 0.]
     grid_img = []
     grid_img2 = []
+    grid_img3 = []
     open_cells = grid._grid.get_open_indices()
     beliefs_flat = [grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells]
     alien_beliefs_flat = [grid.grid[oc[1]][oc[0]].alien_belief for oc in open_cells]
@@ -272,32 +321,42 @@ def plot_world_state(grid, bot):
     for j in range(grid.D):
         grid_img.append([])
         grid_img2.append([])
+        grid_img3.append([])
         for i in range(grid.D):
-            if grid._grid.has_alien((i,j)):
-                grid_img2[-1].append(red)
-            elif bot.pos == (i, j):
-                grid_img2[-1].append(yellow)
-            elif grid.grid[j][i].open:
-                grid_img2[-1].append([c*grid.grid[j][i].alien_belief/max_alien_belief for c in orange])
-                if grid.grid[j][i].alien_belief < 0:
-                    print("TOO LOW")
-            else:
-                grid_img2[-1].append(white)
-
             if grid.crew_pos == (i, j):
                 grid_img[-1].append(green)
             elif bot.pos == (i, j):
                 grid_img[-1].append(yellow)
+            elif grid._grid.has_alien((i,j)):
+                grid_img[-1].append(red)
             elif grid.grid[j][i].open:
-                grid_img[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
+                #grid_img[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
+                #if grid.grid[j][i].crew_belief < 0:
+                #    print("TOO LOW")
+                grid_img[-1].append(black)
+            else:
+                grid_img[-1].append(white)
+
+            if grid.grid[j][i].open:
+                grid_img2[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
                 if grid.grid[j][i].crew_belief < 0:
                     print("TOO LOW")
             else:
-                grid_img[-1].append(white)
-    plt.subplot(121)
+                grid_img2[-1].append(white)
+
+            if grid.grid[j][i].open:
+                grid_img3[-1].append([c*grid.grid[j][i].alien_belief/max_alien_belief for c in orange])
+                if grid.grid[j][i].alien_belief < 0:
+                    print("TOO LOW")
+            else:
+                grid_img3[-1].append(white)
+
+    plt.subplot(131)
     plt.imshow(grid_img)
-    plt.subplot(122)
+    plt.subplot(132)
     plt.imshow(grid_img2)
+    plt.subplot(133)
+    plt.imshow(grid_img3)
     #plt.show()
 g = Grid2()
 b = bot1(g)
