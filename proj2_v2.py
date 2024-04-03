@@ -22,11 +22,11 @@ COMPUTE_LIMIT = 5000
 class Alien:
     # This alien_id is used to keep track of every alien
     alien_id = 0
-    def __init__(self, grid):
+    def __init__(self, grid, indi=None):
         self.grid = grid
         indices = self.grid.get_unoccupied_open_indices()
         ind = rd.choice(indices)
-        self.ind = ind
+        self.ind = ind if indi == None else indi
         self.alien_id = Alien.alien_id
         self.grid.place_alien(ind, Alien.alien_id)
         Alien.alien_id += 1
@@ -270,7 +270,11 @@ class bot1:
 
         if not self.grid._grid.has_alien(self.pos):
             self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
-        self.tick += 1
+            self.tick += 1
+            return False
+        else:
+            # bot ded
+            return True
 
 class bot2:
     def __init__(self, grid, alpha = 0.1, k=2, debug=1):
@@ -618,6 +622,10 @@ class bot2:
         if not self.grid._grid.has_alien(self.pos):
             self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
             self.tick += 1
+            return False
+        else:
+            # bot ded
+            return True
 
 gif_coll = []
 def plot_world_state(grid, bot, grid_coor):
@@ -681,6 +689,7 @@ for i in range(200):
 
     for _ in range(MAX_TURNS):
         b1.move()
+        a.move()
         turns += 1
         if g.crew_pos == b1.pos:
             break
