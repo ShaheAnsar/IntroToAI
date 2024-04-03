@@ -6,6 +6,7 @@ import random as rd
 from PIL import Image
 from collections import deque
 from math import floor
+import copy
 import os
 
 D=35
@@ -94,6 +95,7 @@ class bot1:
         c = rd.random()
         return c <= np.exp(-self.alpha
                            * (self.grid.distance_to_crew(self.pos) - 1))
+    
     def alien_sensor(self):
         found_alien = 0
         for j in range(-self.k, self.k + 1):
@@ -357,7 +359,7 @@ class bot2:
                     old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
                     if old_distance == 0:
                         old_distance = 1
-                    maxi /= old_distance
+                    maxi /= (old_distance / 2)
                     flag = True
 
                 (new_upper_x, new_lower_x), (new_upper_y, new_lower_y) = self.find_upper_and_lower(i, j)
@@ -367,7 +369,7 @@ class bot2:
 
                 if new_distance == 0:
                     new_distance = 1
-                curr_iter_grid_prob = divs / new_distance
+                curr_iter_grid_prob = (divs / new_distance) * 2
 
                 if curr_iter_grid_prob > maxi and divs != 0:
                     maxi = self.divisions[j][i]
@@ -624,53 +626,92 @@ class bot2:
         if not self.grid._grid.has_alien(self.pos):
             self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
             self.tick += 1
-            return False
+            return [False, grid_coor]
         else:
             # bot ded
-            return True
+            return [True, grid_coor]
 
 gif_coll = []
-def plot_world_state(grid, bot, grid_coor):
+def plot_world_state(grid, bot, grid_coor=(0,0)):
     red = [1., 0., 0.]
+    orange = [1.0, 0.7, 0.0]
+    purple = [0.7, 0.0, 1.0]
     blue = [0., 0., 1.]
     green = [0., 1., 0.]
     yellow = [1., 1., 0.]
     white = [1., 1., 1.]
     black = [0., 0., 0.]
     grid_img = []
-
-    open_cells = grid._grid.get_unoccupied_open_indices()
+    grid_img2 = []
+    grid_img3 = []
+    open_cells = grid._grid.get_open_indices()
     beliefs_flat = [grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells]
+    alien_beliefs_flat = [grid.grid[oc[1]][oc[0]].alien_belief for oc in open_cells]
     max_belief = max(beliefs_flat)
-    # print(f"Max Belief: {max_belief}")
+    max_alien_belief = max(alien_beliefs_flat)
+    # print(f"Max Crew Belief: {max_belief}")
+    # print(f"Max Alien Belief: {max_alien_belief}")
     for j in range(grid.D):
         grid_img.append([])
+        grid_img2.append([])
+        grid_img3.append([])
         for i in range(grid.D):
             if grid.crew_pos == (i, j):
                 grid_img[-1].append(green)
             elif bot.pos == (i, j):
                 grid_img[-1].append(yellow)
+            elif grid._grid.has_alien((i,j)):
+                grid_img[-1].append(red)
+            elif grid.grid[j][i].traversed:
+                grid_img[-1].append(purple)
             elif grid.grid[j][i].open:
-                grid_img[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
+                #grid_img[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
+                #if grid.grid[j][i].crew_belief < 0:
+                #    print("TOO LOW")
+                grid_img[-1].append(black)
+            else:
+                grid_img[-1].append(white)
+
+            if grid.grid[j][i].open:
+                grid_img2[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
                 if grid.grid[j][i].crew_belief < 0:
                     print("TOO LOW")
             else:
-                grid_img[-1].append(white)
+                grid_img2[-1].append(white)
+
+            if grid.grid[j][i].open:
+                grid_img3[-1].append([c*grid.grid[j][i].alien_belief/max_alien_belief for c in orange])
+                if grid.grid[j][i].alien_belief < 0:
+                    print("TOO LOW")
+            else:
+                grid_img3[-1].append(white)
     
+    plt.figure(figsize=(18, 6))
+    fig_manager = plt.get_current_fig_manager()
+    # Set the size and position of the window using the window attribute
+    fig_manager.window.geometry("+{x_position}+{y_position}".format(x_position=0, y_position=0))
+
+    plt.subplot(131)
+    plt.imshow(grid_img)
+
+    plt.subplot(132)
+    plt.imshow(grid_img2)
+    for i in range(7, 35, 7):
+        plt.axhline(i-0.5, color='white', linewidth=2)
+        plt.axvline(i-0.5, color='white', linewidth=2)
+    text = f"Fig 1. Subgrid the bot should head to: {grid_coor[0], grid_coor[1]}"
+    x = 0.5 # horizontally centered
+    y = -0.11 # near the bottom of the image
+    plt.gca().text(x, y, text, ha='center', va='bottom', \
+                   fontsize=10, transform=plt.gca().transAxes)
+    
+    plt.subplot(133)
+    plt.imshow(grid_img3)
+
+    plt.show()
 
     # plt.figure(figsize=(9, 8))
-    # fig_manager = plt.get_current_fig_manager()
-    # # Set the size and position of the window using the window attribute
-    # fig_manager.window.geometry("+{x_position}+{y_position}".format(x_position=0, y_position=0))
-    # for i in range(7, 35, 7):
-    #     plt.axhline(i-0.5, color='white', linewidth=2)
-    #     plt.axvline(i-0.5, color='white', linewidth=2)
 
-    # text = f"Fig 1. Subgrid the bot should head to: {grid_coor[0], grid_coor[1]}"
-    # x = 0.5 # horizontally centered
-    # y = -0.11 # near the bottom of the image
-    # plt.gca().text(x, y, text, ha='center', va='bottom', \
-    #                fontsize=10, transform=plt.gca().transAxes)
     # plt.imshow(grid_img)
     # plt.show()
 
@@ -685,10 +726,10 @@ for k in range(2, 10, 2):
         b1 = bot1(g, debug=False, k=k)
         bot_position = b1.pos
         crew_position = g.crew_pos
-        b2 = bot2(g, debug=False, k=k, bot_pos=bot_position, crew=crew_position)
         a = Alien(g._grid)
+        g2 = copy.deepcopy(g)
         alien_pos = a.ind
-
+        print(f"alien at position {alien_pos} for bot 1")
         MAX_TURNS = 500
         turns = 0
         dead = False
@@ -703,17 +744,31 @@ for k in range(2, 10, 2):
             if g.crew_pos == b1.pos:
                 break
         
+        plot_world_state(g, b1)
+        plt.close()
         if not dead:
             bot1_success.append(turns)
         else:
             bot1_deaths += 1
 
+        # g._grid.reset_grid()
+        # open_cells = g._grid.get_open_indices()
+        # for ci in open_cells:
+        #     g.grid[ci[1]][ci[0]].crew_belief = 1.0
+
+        b2 = bot2(g2, debug=False, k=k, bot_pos=bot_position, crew=crew_position)
         turns = 0
         dead = False
-        a = Alien(g._grid, indi=alien_pos)
+        del a
+        a = Alien(g2._grid, indi=alien_pos)
+        print(f"alien at position {a.ind} for bot 2")
+
         for _ in range(MAX_TURNS):
-            dead = b2.move()
+            dead, grid_coor = b2.move()
             a.move()
+            if _ % 2 == 0:
+                plot_world_state(g, b2, grid_coor)
+                plt.close()
             turns += 1
             if g.crew_pos == b2.pos:
                 break
