@@ -19,6 +19,30 @@ COMPUTE_LIMIT = 5000
         - path planning, that muzzammil should take care of
 '''
 
+class Alien:
+    # This alien_id is used to keep track of every alien
+    alien_id = 0
+    def __init__(self, grid):
+        self.grid = grid
+        indices = self.grid.get_unoccupied_open_indices()
+        ind = rd.choice(indices)
+        self.ind = ind
+        self.alien_id = Alien.alien_id
+        self.grid.place_alien(ind, Alien.alien_id)
+        Alien.alien_id += 1
+
+    def move(self):
+        # Get all possible locations for the alien
+        neighbors = self.grid.get_open_neighbors(self.ind)
+        # Filter out the ones that are occupied by other aliens
+        neighbors_without_aliens = [neighbor for neighbor in neighbors if self.grid.grid[neighbor[1]][neighbor[0]].alien_id == -1]
+        # Randomly choose any of the locations
+        if len(neighbors_without_aliens) > 0:
+            rand_ind = np.random.randint(0, len( neighbors_without_aliens ))
+            self.grid.remove_alien(self.ind)
+            self.ind = neighbors_without_aliens[rand_ind]
+            self.grid.place_alien(self.ind, self.alien_id)
+
 class Grid2:
     def __init__(self, D=35, debug=1):
         self._grid = Grid(D, debug=debug - 1>0)
@@ -40,7 +64,7 @@ class Grid2:
         return d
 
 class bot1:
-    def __init__(self, grid, alpha = 0.08, k=2, debug=1):
+    def __init__(self, grid, alpha = 0.1, k=5, debug=1):
         self.grid = grid
         self.pos = None
         while self.pos == self.grid.crew_pos or self.pos is None:
@@ -50,6 +74,22 @@ class bot1:
         self.tick=0
         self.k=k
 
+    def within_alien_sensor(self, pos):
+        return abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) <= self.k
+
+    def alien_sensor_edge(self, pos, offset):
+        return ( abs(pos[0] - self.pos[0]) == self.k + offset and abs(pos[1] - self.pos[1]) <= self.k ) or (abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) == self.k + offset)
+
+    def in_danger(self, offset=1):
+        for i in range(-offset, offset):
+            for j in range(-offset, offset):
+                # Skip the current bot location
+                if i == 0 and j == 0:
+                    continue
+                if self.grid.grid[j][i].open and self.grid.grid[j][i].alien_belief > 0.1/self.grid.D:                    
+                    return True
+        return False
+
     def crew_sensor(self):
         c = rd.random()
         return c <= np.exp(-self.alpha
@@ -57,21 +97,74 @@ class bot1:
     def alien_sensor(self):
         found_alien = 0
         for j in range(-self.k, self.k + 1):
+            if found_alien == 1:
+                break
             for i in range(-self.k, self.k + 1):
-                if self.grid.grid[j][i].alien_id != -1:
+                pos = [ self.pos[0] + i, self.pos[1] + j ]
+                if pos[0] > self.grid.D - 1:
+                    pos[0] = self.grid.D - 1
+                elif pos[0] < 0:
+                    pos[0] = 0
+                if pos[1] > self.grid.D - 1:
+                    pos[1] = self.grid.D - 1
+                elif pos[1] < 0:
+                    pos[1] = 0
+                if self.grid.grid[pos[1]][pos[0]].alien_id != -1:
                     found_alien = 1
-        return found_alien
+                    break
+        return found_alien == 1
+    
+    def diffuse_alien_prob(self, alien_found):
+        choose_fun = None
+        if alien_found:
+            choose_fun = lambda x: self.within_alien_sensor(x)
+        else:
+            choose_fun = lambda x: not self.within_alien_sensor(x)
+        open_cells = self.grid._grid.get_open_indices()
+        # Cells inside the alien sensor and just outside
+        # The probability will diffuse among these
+        filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
+        alien_belief = np.zeros((self.grid.D, self.grid.D))
 
+        # Diffuse through the edge cells
+        for ci in filtered_open_cells:
+            neighbors = self.grid._grid.get_neighbors(ci)
+            neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n) ]
+            # Diffuse the probability at the current square into the
+            # neighbors that the alien can move to
+            for n in neighbors:
+                alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
+        # Normalizs
+        total_belief = np.sum(alien_belief)
+        for ci in open_cells:
+            alien_belief[ci[1]][ci[0]] /= total_belief
+        # Update the original probabilities
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
 
-    def update_belief(self, beep, falien):
+    def restrict_alien_prob(self, alien_found):
+        choose_fun = None
+        if alien_found:
+            choose_fun = lambda x: self.within_alien_sensor(x)
+        else:
+            choose_fun = lambda x: not self.within_alien_sensor(x)
+
+        open_cells = self.grid._grid.get_open_indices()
+        filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
+        # print(f"Cells to set to 0: {len(filtered_open_cells)}")
+        for ci in filtered_open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
+        # Normalize
+        total_belief = 0
+        for ci in open_cells:
+            total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
+
+    def update_belief(self, beep, alien_found):
         # Crew Belief
         generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
-        open_cells = self.grid._grid.get_unoccupied_open_indices()
-
-        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
-        belief_sum = sum(flat_beliefs)
-        # print(f"1. update belief function, sum of beliefs : {belief_sum}")
-
+        open_cells = self.grid._grid.get_open_indices()
         for ci in open_cells:
             if ci == self.pos:
                 continue
@@ -84,11 +177,19 @@ class bot1:
         # Normalize
         flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
         belief_sum = sum(flat_beliefs)
-        # print(f"2. update belief function, sum of beliefs : {belief_sum}")
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
 
         # Alien Belief
+        # The alien belief consists of two steps-
+        # If there is no detection, we diffuse everything outside of the detection square
+        # If there is a detection, we set everything outside the square to 0 and leave
+        # everything inside the square as is
+        alien_belief = np.zeros(( self.grid.D, self.grid.D ))
+        self.diffuse_alien_prob(alien_found)
+        self.restrict_alien_prob(alien_found)
+        # print("Alien detected" if alien_found else "Alien Not Detected")
+        #alien
 
     def plan_path(self, dest):
         if self.debug:
@@ -104,7 +205,7 @@ class bot1:
         compute_counter = 0
         while not captain_found:
             if len(path_deque) == 0 or compute_counter >= COMPUTE_LIMIT:
-                self.grid.remove_all_traversal()
+                self.grid._grid.remove_all_traversal()
                 return
             compute_counter += 1
             node = path_deque.popleft()
@@ -118,8 +219,8 @@ class bot1:
                 break
             neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
             for neighbor_ind in neighbors_ind:
-                # Add all possible paths that do not hit an alien
-                if not self.grid._grid.has_alien(neighbor_ind):
+                # Add all possible paths that start with no aliens nearby
+                if (self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0) or (compute_counter > 2):
                     new_node = PathTreeNode()
                     new_node.data = neighbor_ind
                     new_node.parent = node
@@ -138,9 +239,9 @@ class bot1:
             self.grid._grid.set_traversed(ind)
         if self.debug:
             print("Planned Path")
-
+    
     def move(self):
-        self.update_belief(self.crew_sensor(), 1)
+        self.update_belief(self.crew_sensor(), self.alien_sensor())
 
         neighbors = self.grid._grid.get_open_neighbors(self.pos)
         neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
@@ -152,15 +253,23 @@ class bot1:
         self.plan_path(dest_cell)
         if len(self.path) != 0:
             self.pos = self.path[0]
-        elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
-            self.pos = rd.choice(neighbors)
+        # If no path is found, we automatically shift to evasion, and the evasion strategy is basic
+        # Go to the cell with the lowest alien probability
         else:
-            self.pos = neighbors[-1]
+            if self.debug:
+                print("Evasion!!")
+            neighbors = self.grid._grid.get_neighbors(self.pos)
+            open_neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open]
+            open_neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].alien_belief)
+            self.pos = open_neighbors[0]
+        
         self.grid._grid.place_bot(self.pos)
-
+        
         if self.pos != self.grid.crew_pos:
             self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
 
+        if not self.grid._grid.has_alien(self.pos):
+            self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
         self.tick += 1
 
 class bot2:
@@ -176,6 +285,22 @@ class bot2:
         self.divisions = self.grid.divisions
         self.grid_pos = (floor(self.pos[0] / 7), floor(self.pos[1] / 7))
 
+    def within_alien_sensor(self, pos):
+        return abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) <= self.k
+
+    def alien_sensor_edge(self, pos, offset):
+        return ( abs(pos[0] - self.pos[0]) == self.k + offset and abs(pos[1] - self.pos[1]) <= self.k ) or (abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) == self.k + offset)
+
+    def in_danger(self, offset=1):
+        for i in range(-offset, offset):
+            for j in range(-offset, offset):
+                # Skip the current bot location
+                if i == 0 and j == 0:
+                    continue
+                if self.grid.grid[j][i].open and self.grid.grid[j][i].alien_belief > 0.1/self.grid.D:                    
+                    return True
+        return False
+
     def crew_sensor(self):
         c = rd.random()
         return c <= np.exp(-self.alpha
@@ -183,10 +308,22 @@ class bot2:
     def alien_sensor(self):
         found_alien = 0
         for j in range(-self.k, self.k + 1):
+            if found_alien == 1:
+                break
             for i in range(-self.k, self.k + 1):
-                if self.grid.grid[j][i].alien_id != -1:
+                pos = [ self.pos[0] + i, self.pos[1] + j ]
+                if pos[0] > self.grid.D - 1:
+                    pos[0] = self.grid.D - 1
+                elif pos[0] < 0:
+                    pos[0] = 0
+                if pos[1] > self.grid.D - 1:
+                    pos[1] = self.grid.D - 1
+                elif pos[1] < 0:
+                    pos[1] = 0
+                if self.grid.grid[pos[1]][pos[0]].alien_id != -1:
                     found_alien = 1
-        return found_alien
+                    break
+        return found_alien == 1
     
     def find_upper_and_lower(self, grid_x, grid_y):
         upper_x, lower_x = (grid_x * 7) + 6, grid_x * 7
@@ -305,8 +442,55 @@ class bot2:
                     max_x, max_y = x, y
 
         return [maxi, (max_x, max_y), grid_coor]  
+    
+    def diffuse_alien_prob(self, alien_found):
+        choose_fun = None
+        if alien_found:
+            choose_fun = lambda x: self.within_alien_sensor(x)
+        else:
+            choose_fun = lambda x: not self.within_alien_sensor(x)
+        open_cells = self.grid._grid.get_open_indices()
+        # Cells inside the alien sensor and just outside
+        # The probability will diffuse among these
+        filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
+        alien_belief = np.zeros((self.grid.D, self.grid.D))
 
-    def update_belief(self, beep, falien):
+        # Diffuse through the edge cells
+        for ci in filtered_open_cells:
+            neighbors = self.grid._grid.get_neighbors(ci)
+            neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n) ]
+            # Diffuse the probability at the current square into the
+            # neighbors that the alien can move to
+            for n in neighbors:
+                alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
+        # Normalizs
+        total_belief = np.sum(alien_belief)
+        for ci in open_cells:
+            alien_belief[ci[1]][ci[0]] /= total_belief
+        # Update the original probabilities
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
+
+    def restrict_alien_prob(self, alien_found):
+        choose_fun = None
+        if alien_found:
+            choose_fun = lambda x: self.within_alien_sensor(x)
+        else:
+            choose_fun = lambda x: not self.within_alien_sensor(x)
+
+        open_cells = self.grid._grid.get_open_indices()
+        filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
+        # print(f"Cells to set to 0: {len(filtered_open_cells)}")
+        for ci in filtered_open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
+        # Normalize
+        total_belief = 0
+        for ci in open_cells:
+            total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
+
+    def update_belief(self, beep, alien_found):
         '''
             updates crew belief (depending on whether or not the beep is heard) every time its called (which 
             should be every time the bot moves).
@@ -340,7 +524,12 @@ class bot2:
                             probability += self.grid.grid[y1][x1].crew_belief
 
                 self.divisions[j][i] = probability / num_open_cells
-                
+
+        alien_belief = np.zeros(( self.grid.D, self.grid.D ))
+        
+        self.diffuse_alien_prob(alien_found)
+        self.restrict_alien_prob(alien_found)
+        # print("Alien detected" if alien_found else "Alien Not Detected")
 
     def plan_path(self, dest):
         '''
@@ -373,8 +562,8 @@ class bot2:
                 break
             neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
             for neighbor_ind in neighbors_ind:
-                # Add all possible paths that do not hit an alien
-                if not self.grid._grid.has_alien(neighbor_ind):
+                # Add all possible paths that start with no aliens nearby
+                if (self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0) or (compute_counter > 2):
                     new_node = PathTreeNode()
                     new_node.data = neighbor_ind
                     new_node.parent = node
@@ -395,34 +584,41 @@ class bot2:
             print("Planned Path")
 
     def move(self):
-        self.update_belief(self.crew_sensor(), 1)
+        self.update_belief(self.crew_sensor(), self.alien_sensor())
 
         neighbors = self.grid._grid.get_open_neighbors(self.pos)
-        # neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
+        neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
         neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
         open_cells = self.grid._grid.get_unoccupied_open_indices()
 
         self.grid._grid.remove_bot(self.pos)
-        # dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
-        max_belief, dest_cell, grid_coor = self.bot_division()
+        _, dest_cell, grid_coor = self.bot_division()
         self.plan_path(dest_cell)
         if len(self.path) != 0:
             self.pos = self.path[0]
-        elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
-            self.pos = rd.choice(neighbors)
+        # If no path is found, we automatically shift to evasion, and the evasion strategy is basic
+        # Go to the cell with the lowest alien probability
         else:
-            self.pos = neighbors[-1]
+            if self.debug:
+                print("Evasion!!")
+            neighbors = self.grid._grid.get_neighbors(self.pos)
+            open_neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open]
+            open_neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].alien_belief)
+            self.pos = open_neighbors[0]
+        #elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+        #    self.pos = rd.choice(neighbors)
+        #else:
+        #    self.pos = neighbors[-1]
+        
         self.grid._grid.place_bot(self.pos)
-
+        
         if self.pos != self.grid.crew_pos:
             self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
 
-        self.tick += 1
+        if not self.grid._grid.has_alien(self.pos):
+            self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
+            self.tick += 1
 
-        return grid_coor
-        #possible_dir = self.grid.get_open_neighbors(self.pos)
-        #possible_dir.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
-        #possible_dir.so
 gif_coll = []
 def plot_world_state(grid, bot, grid_coor):
     red = [1., 0., 0.]
@@ -471,7 +667,7 @@ def plot_world_state(grid, bot, grid_coor):
 bot1_success = []
 bot2_success = []
 
-for i in range(100):
+for i in range(200):
     g = Grid2()
     b1 = bot1(g, debug=False)
     b2 = bot2(g, debug=False)
@@ -506,11 +702,11 @@ for i in range(100):
 print(f"Bot 1 success list: {bot1_success}")
 print(f"Bot 2 success list: {bot2_success}")
 
-bot1_success_rate = sum([steps for steps in bot1_success if steps < 200]) / 100
-bot2_success_rate = sum([steps for steps in bot2_success if steps < 200]) / 100
+bot1_success_rate = len([steps for steps in bot1_success if steps < 200]) / 200
+bot2_success_rate = len([steps for steps in bot2_success if steps < 200]) / 200
 
-bot1_avg = sum(bot1_success) / 100
-bot2_avg = sum(bot2_success) / 100
+bot1_avg = sum(bot1_success) / 200
+bot2_avg = sum(bot2_success) / 200
 
 print(f"The success rate of bot 1 is: {bot1_success_rate}")
 print(f"The success rate of bot 2 is: {bot2_success_rate}")
