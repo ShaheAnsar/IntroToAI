@@ -35,7 +35,6 @@ class Alien:
             self.ind = neighbors_without_aliens[rand_ind]
             self.grid.place_alien(self.ind, self.alien_id)
 
-
 class Grid2:
     def __init__(self, D=35, debug=1):
         self._grid = Grid(D, debug=debug - 1>0)
@@ -74,14 +73,15 @@ class bot3:
         self.found = False
 
     def crew_sensor(self):
-        c = rd.random()
+        c1 = rd.random()
+        c2 = rd.random()
         d1, d2 = self.grid.distance_to_crew(self.pos)
         a, b = False, False
 
         if d1 is not None:
-            a = c <= np.exp(-self.alpha* (d1 - 1))
+            a = c1 <= np.exp(-self.alpha* (d1 - 1))
         if d2 is not None:
-            b = c <= np.exp(-self.alpha* (d2 - 1))
+            b = c2 <= np.exp(-self.alpha* (d2 - 1))
 
         return a or b
     
@@ -256,7 +256,7 @@ class bot3:
             neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
             for neighbor_ind in neighbors_ind:
                 # Add all possible paths that start with no aliens nearby and go through paths with a low alien probability
-                if (self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0 ) or (compute_counter > 1):
+                if (self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0 ) or (compute_counter > 2):
                     new_node = PathTreeNode()
                     new_node.data = neighbor_ind
                     new_node.parent = node
@@ -289,10 +289,17 @@ class bot3:
         self.plan_path(dest_cell)
         if len(self.path) != 0:
             self.pos = self.path[0]
-        elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
-            self.pos = rd.choice(neighbors)
         else:
-            self.pos = neighbors[-1]
+            if self.debug:
+                print("Evasion!!")
+            neighbors = self.grid._grid.get_neighbors(self.pos)
+            open_neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open]
+            open_neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].alien_belief)
+            self.pos = open_neighbors[0]
+        # elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+            # self.pos = rd.choice(neighbors)
+        # else:
+            # self.pos = neighbors[-1]
         self.grid._grid.place_bot(self.pos)
 
         if self.pos != self.grid.crew_pos:
@@ -396,7 +403,7 @@ def plot_world_state(grid, bot):
 g = Grid2()
 b = bot3(g)
 a = Alien(g._grid)
-MAX_TURNS = 200
+MAX_TURNS = 500
 turns = 0
 for _ in range(MAX_TURNS):
     print(f"Turn {_}")

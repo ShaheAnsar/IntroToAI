@@ -57,6 +57,24 @@ class Grid2:
         while self.crew_pos == c:
             c = rd.choice(self._grid.get_open_indices())
         self.crew_pos2 = c
+        self.alpha = 0.1
+        X = np.arange(0, 35)
+        Y = np.arange(0, 35)
+        prob_grid = []
+        for j in range(self.D):
+            prob_grid.append([])
+            for i in range(self.D):
+                p1 = np.exp(-self.alpha * self.distance(self.crew_pos, (i, j)))
+                p2 = np.exp(-self.alpha * self.distance(self.crew_pos2, (i, j)))
+                ptotal = p1 + p2 - p1*p2
+                prob_grid[-1].append(ptotal)
+        prob_sum = np.sum(prob_grid)
+        for j in Y:
+            for i in X:
+                prob_grid[j][i] /= prob_sum
+        plt.imshow(prob_grid)
+        plt.title("Probability of getting beeps")
+        #plt.show()
 
     def distance(self, pos1, pos2):
         d = abs(pos1[1] - pos2[1])
@@ -71,29 +89,32 @@ class Grid2:
             d2 = self.distance(self.crew_pos2, pos)
 
         return d1, d2
-
-class bot3:
-    def __init__(self, grid, alpha = 0.1, k=5, debug=1):
+class bot4:
+    def __init__(self, grid, alpha = 0.15, k=5, debug=1):
         self.grid = grid
         self.pos = None
         while self.pos == self.grid.crew_pos or self.pos == self.grid.crew_pos2 or self.pos is None:
             self.pos = rd.choice(self.grid._grid.get_open_indices())
-        self.alpha = alpha
         self.debug=debug
+        if self.debug:
+            print(self.pos)
+        self.alpha = alpha
+        
         self.tick=0
         self.k=k
         #self.found = False
         self.found_crew = None
 
     def crew_sensor(self):
-        c = rd.random()
+        c1 = rd.random()
+        c2 = rd.random()
         d1, d2 = self.grid.distance_to_crew(self.pos)
         a, b = False, False
 
         if d1 is not None:
-            a = c <= np.exp(-self.alpha* (d1 - 1))
+            a = c1 <= np.exp(-self.alpha* (d1 - 1))
         if d2 is not None:
-            b = c <= np.exp(-self.alpha* (d2 - 1))
+            b = c2 <= np.exp(-self.alpha* (d2 - 1))
 
         return a or b
     
@@ -201,7 +222,7 @@ class bot3:
 
         open_cells = self.grid._grid.get_open_indices()
         filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
-        print(f"Cells to set to 0: {len(filtered_open_cells)}")
+        #print(f"Cells to set to 0: {len(filtered_open_cells)}")
         for ci in filtered_open_cells:
             self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
         # Normalize
@@ -268,7 +289,7 @@ class bot3:
         alien_belief = np.zeros(( self.grid.D, self.grid.D ))
         self.diffuse_alien_prob(alien_found)
         self.restrict_alien_prob(alien_found)
-        print("Alien detected" if alien_found else "Alien Not Detected")
+        #print("Alien detected" if alien_found else "Alien Not Detected")
 
     def plan_path(self, dest):
         if self.debug:
@@ -318,10 +339,23 @@ class bot3:
             self.grid._grid.set_traversed(ind)
         if self.debug:
             print("Planned Path")
+    
+    def test(self):
+        consolidated_prob = {}
+        for oc in self.grid._grid.get_open_indices():
+            consolidated_prob[oc] = 0.0
+        for k, v in self.grid.beliefs.items():
+            consolidated_prob[k[0]] += v
+            consolidated_prob[k[1]] += v
+        overall_probs = list(consolidated_prob)
+        overall_probs.sort(key=lambda x: consolidated_prob[x])
+        print(f"Highest indices: {overall_probs[-1:-10:-1]}")
 
     def move(self):        
-        self.update_belief(self.crew_sensor(), self.alien_sensor())
-
+        beep = self.crew_sensor()
+        self.update_belief(beep, self.alien_sensor())
+        if self.debug:
+            print("BEEP" if beep else "NO BEEP")
         neighbors = self.grid._grid.get_open_neighbors(self.pos)
         #neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
         neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
@@ -330,11 +364,17 @@ class bot3:
         self.grid._grid.remove_bot(self.pos)
 
         max_belief = max(self.grid.beliefs.values())
-        position = [key for key in self.grid.beliefs.keys() if self.grid.beliefs[key] == max_belief][0]
+        sorted_positions = [key for key in self.grid.beliefs.keys()]
+        sorted_positions.sort(key=lambda x: self.grid.beliefs[x])
+        position = sorted_positions[-1]
         dest_cell = min(position[0], position[1], 
                         key=lambda x: abs(x[0] - self.pos[0]) + abs(x[1] - self.pos[1])
                     ) if self.found_crew is None else (position[0] if self.found_crew == position[1] else position[1])
-        
+        if self.debug:
+            print(f"No. of pairs: {len(self.grid.beliefs)}")
+            print(f"Top 3 position pairs: {sorted_positions[-1]} : {self.grid.beliefs[sorted_positions[-1]]}, {sorted_positions[-2]} : {self.grid.beliefs[sorted_positions[-2]]}, {sorted_positions[-3]} : {self.grid.beliefs[sorted_positions[-3]]}")
+            print(f"Dest Cell: {dest_cell}, actual crew: {self.grid.crew_pos}, {self.grid.crew_pos2}")
+            self.test()
         #dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
 
         self.plan_path(dest_cell)
@@ -355,9 +395,13 @@ class bot3:
         if (self.pos != self.found_crew) and \
             (self.pos != self.grid.crew_pos) and (self.pos != self.grid.crew_pos2):
             self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+            keys_to_delete = []
             for key, _ in self.grid.beliefs.items():
                 if self.pos in key:
                     self.grid.beliefs[key] = 0
+                    keys_to_delete.append(key)
+            for k in keys_to_delete:
+                del self.grid.beliefs[k]
         
         if self.pos == self.grid.crew_pos:
             self.update_helper(1)
@@ -382,7 +426,7 @@ class bot3:
 
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
             print("Success!")
-            exit(1)
+            pass
 
 gif_coll = []
 def plot_world_state(grid, bot):
@@ -440,39 +484,65 @@ def plot_world_state(grid, bot):
                     print("TOO LOW")
             else:
                 grid_img3[-1].append(white)
-    plt.figure(figsize=(18, 6))
-    plt.subplot(131)
-    plt.imshow(grid_img)
-    plt.subplot(132)
-    plt.imshow(grid_img2)
-    plt.subplot(133)
-    plt.imshow(grid_img3)
+    # plt.figure(figsize=(18, 6))
+    # plt.subplot(131)
+    # plt.imshow(grid_img)
+    # plt.subplot(132)
+    # plt.imshow(grid_img2)
+    # plt.subplot(133)
+    # plt.imshow(grid_img3)
     #plt.show()
-g = Grid2()
-b = bot3(g)
-a = Alien(g._grid)
-MAX_TURNS = 200
-turns = 0
-for _ in range(MAX_TURNS):
-    print(f"Turn {_}")
-    b.move()
-    if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
-        print("Alien belief 0 at alien position!!!!")
-    #plot_world_state(g, b)
-    #plt.show()
-    a.move()
-    plot_world_state(g, b)
-    plt.savefig(f"tmp{_}.png", dpi=200)
-    plt.close()
-    #plt.show()
-    gif_coll.append(Image.open(f"tmp{_}.png"))
-    turns += 1
-    if g.crew_pos == b.pos:
-        print("SUCCES: Crew member reached!")
-        break
-print("Saving gif...")
-#gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
-os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
-for _ in range(turns):
-    os.remove(f"tmp{_}.png")
-print("hello")
+# g = Grid2()
+# b = bot4(g)
+# a = Alien(g._grid)
+# MAX_TURNS = 2000
+# turns = 0
+# for _ in range(MAX_TURNS):
+#     print(f"Turn {_}")
+#     b.move()
+#     if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
+#         print("Alien belief 0 at alien position!!!!")
+#     #plot_world_state(g, b)
+#     #plt.show()
+#     a.move()
+#     #plot_world_state(g, b)
+#     #plt.savefig(f"tmp{_}.png", dpi=200)
+#     #plt.close()
+#     #plt.show()
+#     #gif_coll.append(Image.open(f"tmp{_}.png"))
+#     turns += 1
+#     if g.crew_pos == b.pos:
+#         print("SUCCES: Crew member reached!")
+#         break
+# print("Saving gif...")
+# #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
+# os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
+# for _ in range(turns):
+#     os.remove(f"tmp{_}.png")
+# print("hello")
+
+
+bot4_steps = []
+
+for i in range(40):
+    g = Grid2()
+    b = bot4(g, debug=False)
+    a = Alien(g._grid)
+    MAX_TURNS = 1000
+    turns = 0
+
+    print(f"We're currently at iteration {i}")
+    
+    for _ in range(MAX_TURNS):
+        # print(f"Turn {_}")
+        b.move()
+        a.move()
+        turns += 1
+        print(turns)
+        if g.crew_pos == None and g.crew_pos2 == None:
+            print(f"It took {_} steps to find both the crew members")
+            break
+            
+    bot4_steps.append(turns)
+
+print(bot4_steps)

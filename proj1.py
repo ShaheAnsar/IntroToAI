@@ -20,7 +20,7 @@ COMPUTE_LIMIT=10000
 
 class GridAttrib:
     __slots__ = ('open', 'bot_occupied', 'traversed', 'alien_id',
-                 'captain_slot', 'crew_belief', 'alien_belief')
+                 'captain_slot', 'crew_belief', 'alien_belief', 'alien_belief2')
 
     def __init__(self):
         self.open = False
@@ -30,6 +30,7 @@ class GridAttrib:
         self.captain_slot = False
         self.crew_belief = 1.0 # Start out with a uniform belief of 1.0
         self.alien_belief = 1.0 # Start out with a uniform belief of 1.0
+        self.alien_belief2 = 1.0 # Start out with a uniform belief of 1.0
 
 
 class Grid:
