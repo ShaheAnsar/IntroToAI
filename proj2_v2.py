@@ -277,11 +277,13 @@ class bot1:
             return True
 
 class bot2:
-    def __init__(self, grid, alpha = 0.1, k=2, debug=1):
+    def __init__(self, grid, alpha = 0.1, k=2, debug=1, bot_pos=None, crew=None):
         self.grid = grid
         self.pos = None
         while self.pos == self.grid.crew_pos or self.pos is None:
-            self.pos = rd.choice(self.grid._grid.get_open_indices())
+            self.pos = rd.choice(self.grid._grid.get_open_indices()) if \
+                bot_pos == None else bot_pos
+        self.grid.crew_pos = self.grid.crew_pos if crew == None else crew
         self.alpha = alpha
         self.debug=debug
         self.tick=0
@@ -672,53 +674,79 @@ def plot_world_state(grid, bot, grid_coor):
     # plt.imshow(grid_img)
     # plt.show()
 
-bot1_success = []
-bot2_success = []
 
-for i in range(200):
-    g = Grid2()
-    b1 = bot1(g, debug=False)
-    b2 = bot2(g, debug=False)
-    a = Alien(g._grid)
-    alien_pos = a
+for k in range(2, 10, 2):
+    bot1_success = []
+    bot1_deaths, bot2_deaths = 0, 0
+    bot2_success = []
 
-    MAX_TURNS = 200
-    turns = 0
+    for i in range(200):
+        g = Grid2()
+        b1 = bot1(g, debug=False, k=k)
+        bot_position = b1.pos
+        crew_position = g.crew_pos
+        b2 = bot2(g, debug=False, k=k, bot_pos=bot_position, crew=crew_position)
+        a = Alien(g._grid)
+        alien_pos = a.ind
 
-    print(f"Currently at iteration {i}")
+        MAX_TURNS = 500
+        turns = 0
+        dead = False
 
-    for _ in range(MAX_TURNS):
-        b1.move()
-        a.move()
-        turns += 1
-        if g.crew_pos == b1.pos:
-            break
-    bot1_success.append(turns)
+        if i % 100 == 0:
+            print(f"Currently at iteration {i} for k = {k}")
 
-    turns = 0
-    for _ in range(MAX_TURNS):
-        grid_coor = b2.move()
-        a.move()
-        turns += 1
-        if g.crew_pos == b2.pos:
-            break
-    bot2_success.append(turns)
+        for _ in range(MAX_TURNS):
+            dead = b1.move()
+            a.move()
+            turns += 1
+            if g.crew_pos == b1.pos:
+                break
+        
+        if not dead:
+            bot1_success.append(turns)
+        else:
+            bot1_deaths += 1
 
+        turns = 0
+        dead = False
+        a = Alien(g._grid, indi=alien_pos)
+        for _ in range(MAX_TURNS):
+            dead = b2.move()
+            a.move()
+            turns += 1
+            if g.crew_pos == b2.pos:
+                break
+            
+        if not dead:
+            bot2_success.append(turns)
+        else:
+            bot2_deaths += 1
 
-print(f"Bot 1 success list: {bot1_success}")
-print(f"Bot 2 success list: {bot2_success}")
+    print(f"For k: {k}")
+    print(f"Bot 1 success list: {bot1_success}")
+    print(f"Bot 2 success list: {bot2_success}")
+    print()
 
-bot1_success_rate = len([steps for steps in bot1_success if steps < 200]) / 200
-bot2_success_rate = len([steps for steps in bot2_success if steps < 200]) / 200
+    bot1_success_rate = len(bot1_success) / 200
+    bot2_success_rate = len(bot2_success) / 200
 
-bot1_avg = sum(bot1_success) / 200
-bot2_avg = sum(bot2_success) / 200
+    bot1_avg = sum(bot1_success) / 200
+    bot2_avg = sum(bot2_success) / 200
 
-print(f"The success rate of bot 1 is: {bot1_success_rate}")
-print(f"The success rate of bot 2 is: {bot2_success_rate}")
+    print(f"The success rate of bot 1 is: {bot1_success_rate}")
+    print(f"The success rate of bot 2 is: {bot2_success_rate}")
+    print()
 
-print(f"The average number of steps taken by bot 1 are: {bot1_avg}")
-print(f"The average number of steps taken by bot 2 are: {bot2_avg}")
+    print(f"Bot 1 died {bot1_deaths} times")
+    print(f"Bot 2 died {bot2_deaths} times")
+    print()
+
+    print(f"The average number of steps taken by bot 1 are: {bot1_avg}")
+    print(f"The average number of steps taken by bot 2 are: {bot2_avg}")
+    print()
+    print()
+
 
 # print("Saving gif...")
 # #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
