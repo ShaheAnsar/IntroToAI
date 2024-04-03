@@ -293,6 +293,16 @@ class bot2:
         self.divisions = self.grid.divisions
         self.grid_pos = (floor(self.pos[0] / 7), floor(self.pos[1] / 7))
 
+    def reset_beliefs(self):
+        # Reset crew_belief and alien_belief for all cells
+        open_cells = self.grid._grid.get_open_indices()
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].crew_belief = 1.0 / len(open_cells)  # Set to uniform distribution
+            self.grid.grid[ci[1]][ci[0]].alien_belief = 1.0 / len(open_cells)  # Set to uniform distribution
+
+        # Reset the divisions (if needed)
+        self.divisions = [[1.0 for i in range(5)] for i in range(5)]
+
     def within_alien_sensor(self, pos):
         return abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) <= self.k
 
@@ -354,13 +364,13 @@ class bot2:
 
                 (old_upper_x, old_lower_x), (old_upper_y, old_lower_y) = self.find_upper_and_lower(max_x, max_y)
 
-                if flag == False:
-                    old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
-                    old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
-                    if old_distance == 0:
-                        old_distance = 1
-                    maxi /= (old_distance / 2)
-                    flag = True
+                # if flag == False:
+                #     old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
+                #     old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
+                #     if old_distance == 0:
+                #         old_distance = 1
+                #     maxi /= (old_distance / 2)
+                #     flag = True
 
                 (new_upper_x, new_lower_x), (new_upper_y, new_lower_y) = self.find_upper_and_lower(i, j)
                 new_mid_x, new_mid_y = (new_upper_x + new_lower_x) / 2, (new_upper_y + new_lower_y) / 2
@@ -369,7 +379,8 @@ class bot2:
 
                 if new_distance == 0:
                     new_distance = 1
-                curr_iter_grid_prob = (divs / new_distance) * 2
+                # curr_iter_grid_prob = (divs / new_distance) * 2
+                curr_iter_grid_prob = divs
 
                 if curr_iter_grid_prob > maxi and divs != 0:
                     maxi = self.divisions[j][i]
@@ -715,82 +726,92 @@ def plot_world_state(grid, bot, grid_coor=(0,0)):
     # plt.imshow(grid_img)
     # plt.show()
 
+def main():
+    for k in range(2, 10, 2):
+        bot1_success = []
+        bot1_deaths, bot2_deaths = 0, 0
+        bot2_success = []
 
-for k in range(2, 10, 2):
-    bot1_success = []
-    bot1_deaths, bot2_deaths = 0, 0
-    bot2_success = []
+        for i in range(200):
+            g = Grid2()
+            b1 = bot1(g, k=k, debug=False)
+            a1 = Alien(g._grid)
+            g2 = copy.deepcopy(g)
 
-    for i in range(200):
-        g = Grid2()
-        b1 = bot1(g, k=k, debug=False)
-        a1 = Alien(g)
-        g2 = copy.deepcopy(g)
-
-        bot_pos = b1.pos
-        alien_pos = a1.ind
-        a2 = Alien(g2, alien_pos)
-        turns = 0
-        dead = False
-
-        for _ in range(500):
-            dead = b1.move()
-            a1.move()
-            turns += 1
-
-            if dead or b1.pos == g.crew_pos:
-                break
-        
-        if dead:
-            # this means that the bot died
+            bot_pos = b1.pos
+            alien_pos = a1.ind
+            a2 = Alien(g2._grid, alien_pos)
+            print(f"alien 1 pos: {a1.ind}, alien 2 pos: {a2.ind}")
+            turns = 0
             dead = False
-            bot1_deaths += 1
-        else:
-            bot1_success.append(turns)
 
-        plot_world_state(g, b1)
-        turns = 0
-        b2 = bot2(g2, k=k, bot_pos=bot_pos)
+            for _ in range(500):
+                dead = b1.move()
+                a1.move()
+                turns += 1
+                if a1.ind == b1.pos:
+                    dead = True
 
-        for _ in range(500):
-            dead, grid_coor = b2.move()
-            a1.move()
-            turns += 1
-            plot_world_state(g2, b2, grid_coor)
-            if dead or b2.pos == g.crew_pos:
-                break
-        
-        if dead:
-            # this means that the bot died
-            dead = False
-            bot2_deaths += 1
-        else:
-            bot2_success.append(turns)
+                if dead or b1.pos == g.crew_pos:
+                    break
+            
+            if dead:
+                # this means that the bot died
+                dead = False
+                bot1_deaths += 1
+            else:
+                bot1_success.append(turns)
+
+            plot_world_state(g, b1)
+            turns = 0
+            b2 = bot2(g2, k=k, bot_pos=bot_pos, debug=False)
+            b2.reset_beliefs()
+            del a1
+            
+            for _ in range(500):
+                dead, grid_coor = b2.move()
+                a2.move()
+                turns += 1
+                plot_world_state(g2, b2, grid_coor)
+                if a2.ind == b2.pos:
+                    dead = True
+                if dead or b2.pos == g.crew_pos:
+                    break
+            
+            if dead:
+                # this means that the bot died
+                dead = False
+                bot2_deaths += 1
+            else:
+                bot2_success.append(turns)
 
 
-    print(f"For k: {k}")
-    print(f"Bot 1 success list: {bot1_success}")
-    print(f"Bot 2 success list: {bot2_success}")
-    print()
+        print(f"For k: {k}")
+        print(f"Bot 1 success list: {bot1_success}")
+        print(f"Bot 2 success list: {bot2_success}")
+        print()
 
-    bot1_success_rate = len(bot1_success) / 200
-    bot2_success_rate = len(bot2_success) / 200
+        bot1_success_rate = len(bot1_success) / 200
+        bot2_success_rate = len(bot2_success) / 200
 
-    bot1_avg = sum(bot1_success) / 200
-    bot2_avg = sum(bot2_success) / 200
+        bot1_avg = sum(bot1_success) / 200
+        bot2_avg = sum(bot2_success) / 200
 
-    print(f"The success rate of bot 1 is: {bot1_success_rate}")
-    print(f"The success rate of bot 2 is: {bot2_success_rate}")
-    print()
+        print(f"The success rate of bot 1 is: {bot1_success_rate}")
+        print(f"The success rate of bot 2 is: {bot2_success_rate}")
+        print()
 
-    print(f"Bot 1 died {bot1_deaths} times")
-    print(f"Bot 2 died {bot2_deaths} times")
-    print()
+        print(f"Bot 1 died {bot1_deaths} times")
+        print(f"Bot 2 died {bot2_deaths} times")
+        print()
 
-    print(f"The average number of steps taken by bot 1 are: {bot1_avg}")
-    print(f"The average number of steps taken by bot 2 are: {bot2_avg}")
-    print()
-    print()
+        print(f"The average number of steps taken by bot 1 are: {bot1_avg}")
+        print(f"The average number of steps taken by bot 2 are: {bot2_avg}")
+        print()
+        print()
+
+if __name__ == '__main__':
+    main()
 
 
 # print("Saving gif...")

@@ -1,6 +1,7 @@
 Bot 2:
-- it moves opposite to the direction of the subgrid with the max belief, so something might be wrong with the grid indexing. I'll have to add some visualization and fix that.
-- we gotta add aliens to this too, I don't think they're added.
+- it can NOT handle aliens. It absolutely sucks when an alien is detected nearby. 
+    I didn't check how bot 1 handles it, but bot 2 is ass when it comes to this.
+- i think the evasion also sucks, but let's see about that.
 
 Bot 4:
 - it just plain sucks, gotta check the math on this one
