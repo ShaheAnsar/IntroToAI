@@ -1,7 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from proj1 import GridAttrib, Grid, Alien, PathTreeNode
+from proj1 import GridAttrib, Grid, PathTreeNode
 from numpy import random as nprd
+import random
 import random as rd
 from PIL import Image
 from collections import deque
@@ -9,6 +10,30 @@ import os
 
 D=35
 COMPUTE_LIMIT = 5000
+
+class Alien:
+    # This alien_id is used to keep track of every alien
+    alien_id = 0
+    def __init__(self, grid):
+        self.grid = grid
+        indices = self.grid.get_unoccupied_open_indices()
+        ind = random.choice(indices)
+        self.ind = ind
+        self.alien_id = Alien.alien_id
+        self.grid.place_alien(ind, Alien.alien_id)
+        Alien.alien_id += 1
+
+    def move(self):
+        # Get all possible locations for the alien
+        neighbors = self.grid.get_open_neighbors(self.ind)
+        # Filter out the ones that are occupied by other aliens
+        neighbors_without_aliens = [neighbor for neighbor in neighbors if self.grid.grid[neighbor[1]][neighbor[0]].alien_id == -1]
+        # Randomly choose any of the locations
+        if len(neighbors_without_aliens) > 0:
+            rand_ind = np.random.randint(0, len( neighbors_without_aliens ))
+            self.grid.remove_alien(self.ind)
+            self.ind = neighbors_without_aliens[rand_ind]
+            self.grid.place_alien(self.ind, self.alien_id)
 
 class Grid2:
     def __init__(self, D=35, debug=1):
@@ -40,6 +65,17 @@ class bot1:
 
     def alien_sensor_edge(self, pos, offset):
         return ( abs(pos[0] - self.pos[0]) == self.k + offset and abs(pos[1] - self.pos[1]) <= self.k ) or (abs(pos[0] - self.pos[0]) <= self.k and abs(pos[1] - self.pos[1]) == self.k + offset)
+
+    def in_danger(self, offset=1):
+        for i in range(-offset, offset):
+            for j in range(-offset, offset):
+                # Skip the current bot location
+                if i == 0 and j == 0:
+                    continue
+                if self.grid.grid[j][i].open and self.grid.grid[j][i].alien_belief > 0.1/self.grid.D:                    
+                    return True
+        return False
+
 
  
     def crew_sensor(self):
@@ -93,7 +129,7 @@ class bot1:
         open_cells = self.grid._grid.get_open_indices()
         # Cells inside the alien sensor and just outside
         # The probability will diffuse among these
-        filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else -1) )]
+        filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
         alien_belief = np.zeros((self.grid.D, self.grid.D))
 
         # Diffuse through the edge cells
@@ -136,13 +172,9 @@ class bot1:
             choose_fun = lambda x: not self.within_alien_sensor(x)
 
         open_cells = self.grid._grid.get_open_indices()
-        for i in open_cells:
-            if not choose_fun(i):
-                print("Seems to work")
         filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
         print(f"Cells to set to 0: {len(filtered_open_cells)}")
         for ci in filtered_open_cells:
-            print("Setting to 0")
             self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
         # Normalize
         total_belief = 0
@@ -253,8 +285,9 @@ class bot1:
                 break
             neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
             for neighbor_ind in neighbors_ind:
-                # Add all possible paths that do not hit an alien
-                if not self.grid._grid.has_alien(neighbor_ind):
+                # Add all possible paths that start with no aliens nearby and go through paths with a low
+                # alien probability
+                if ( self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0 ) or (compute_counter > 1):
                     new_node = PathTreeNode()
                     new_node.data = neighbor_ind
                     new_node.parent = node
@@ -297,12 +330,13 @@ class bot1:
 
         if not self.grid._grid.has_alien(self.pos):
             self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
-
         self.tick += 1
+
 gif_coll = []
 def plot_world_state(grid, bot):
     red = [1., 0., 0.]
-    orange = [1.0, 0.5, 0.5]
+    orange = [1.0, 0.7, 0.0]
+    purple = [0.7, 0.0, 1.0]
     blue = [0., 0., 1.]
     green = [0., 1., 0.]
     yellow = [1., 1., 0.]
@@ -329,6 +363,8 @@ def plot_world_state(grid, bot):
                 grid_img[-1].append(yellow)
             elif grid._grid.has_alien((i,j)):
                 grid_img[-1].append(red)
+            elif grid.grid[j][i].traversed:
+                grid_img[-1].append(purple)
             elif grid.grid[j][i].open:
                 #grid_img[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
                 #if grid.grid[j][i].crew_belief < 0:
@@ -350,7 +386,7 @@ def plot_world_state(grid, bot):
                     print("TOO LOW")
             else:
                 grid_img3[-1].append(white)
-
+    plt.figure(figsize=(18, 6))
     plt.subplot(131)
     plt.imshow(grid_img)
     plt.subplot(132)
@@ -366,12 +402,15 @@ turns = 0
 for _ in range(MAX_TURNS):
     print(f"Turn {_}")
     b.move()
+    if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
+        print("Alien belief 0 at alien position!!!!")
     #plot_world_state(g, b)
     #plt.show()
     a.move()
     plot_world_state(g, b)
     plt.savefig(f"tmp{_}.png", dpi=200)
-    plt.show()
+    plt.close()
+    #plt.show()
     gif_coll.append(Image.open(f"tmp{_}.png"))
     turns += 1
     if g.crew_pos == b.pos:
