@@ -14,8 +14,8 @@ COMPUTE_LIMIT = 5000
 '''
     # TODO
     after creating the divisions grid, we're going to need a few more things:
-        - i think there's a problem with the random movements, it's not getting taken care of properly
-        - something's fishy about this thing
+        - fix the moving in and out of the destination cell
+        - maybe reduce the impact of the distance normalization?
         - path planning, that muzzammil should take care of
 '''
 
@@ -39,7 +39,7 @@ class Grid2:
         d = self.distance(self.crew_pos, pos)
         return d
 
-class bot1:
+class bot2:
     def __init__(self, grid, alpha = 0.1, k=2, debug=1):
         self.grid = grid
         self.pos = None
@@ -78,7 +78,7 @@ class bot1:
         maxi = self.divisions[max_y][max_x]
         flag = False
 
-        # TODO: normalize for distance
+        # TODO: maybe decrease the amount you normalize for distance?
         for j, y in enumerate(self.divisions):
             for i, x in enumerate(y):
                 divs = self.divisions[j][i]
@@ -165,42 +165,18 @@ class bot1:
             return [max, (max_x, max_y), grid_coor]
 
         (upper_x, lower_x), (upper_y, lower_y) = self.find_upper_and_lower(grid_coor[0], grid_coor[1])
-        print(f"upper_x: {upper_x}, lower_x: {lower_x}, upper_y: {upper_y}, lower_y: {lower_y}")
+        # print(f"upper_x: {upper_x}, lower_x: {lower_x}, upper_y: {upper_y}, lower_y: {lower_y}")
 
-        # what if the bot is already in the sub-grid?
-        # TODO: this should work?
-        if (lower_x <= self.pos[0] <= upper_x) and (lower_y <= self.pos[1] <= upper_y):
-            # this means that the bot is already in the sub-grid
-            maxi = 0
-            max_x, max_y = self.pos[0], self.pos[1]
-            for x in range(lower_x, upper_x + 1):
-                for y in range(lower_y, upper_y + 1):
-                    curr_cell = self.grid.grid[y][x]
-                    if curr_cell.open == True and curr_cell.crew_belief > maxi:
-                        maxi = self.grid.grid[y][x].crew_belief
-                        max_x, max_y = x, y
+        maxi = 0
+        max_x, max_y = self.pos[0], self.pos[1]
+        for x in range(lower_x, upper_x + 1):
+            for y in range(lower_y, upper_y + 1):
+                curr_cell = self.grid.grid[y][x]
+                if curr_cell.open == True and curr_cell.crew_belief > maxi:
+                    maxi = self.grid.grid[y][x].crew_belief
+                    max_x, max_y = x, y
 
-            return [maxi, (max_x, max_y), grid_coor]
-
-        # now we have to find the center cell AND make sure that it's not a wall 
-        mid_x, mid_y = int((upper_x + lower_x) / 2), int((upper_y + lower_y) / 2)
-        print(f"Before finding the 'open cell',\nmid_x: {mid_x}\nmid_y: {mid_y}")
-        is_valid = lambda x, y: True if (0 <= x <= 34 and 0 <= y <= 34) else False
-        deq = deque([(mid_x, mid_y)])
-
-        while self.grid.grid[mid_y][mid_x].open == False:
-            # keep finding other cells (go through the neighbors till you get something?)
-            # print(mid_x, mid_y)
-            mid_x, mid_y = deq.popleft()
-            neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-            for neighbor in neighbors:
-                n_x, n_y = mid_x + neighbor[0], mid_y + neighbor[1]
-                if is_valid(n_x, n_y):
-                    deq.append((n_x, n_y))
-
-        print(f"After finding the 'open cell',\nmid_x: {mid_x}\nmid_y: {mid_y}")
-        return [max_belief, (mid_x, mid_y), grid_coor]
-    
+        return [maxi, (max_x, max_y), grid_coor]    
 
     def update_belief(self, beep, falien):
         '''
@@ -365,18 +341,18 @@ def plot_world_state(grid, bot, grid_coor):
     plt.show()
 
 g = Grid2()
-b = bot1(g)
+b2 = bot2(g)
 MAX_TURNS = 200
 turns = 0
 for _ in range(MAX_TURNS):
     plt.close('all')
     print(f"Turn {_}")
-    grid_coor = b.move()
-    plot_world_state(g, b, grid_coor)
+    grid_coor = b2.move()
+    plot_world_state(g, b2, grid_coor)
     plt.savefig(f"tmp{_}.png", dpi=200)
     gif_coll.append(Image.open(f"tmp{_}.png"))
     turns += 1
-    if g.crew_pos == b.pos:
+    if g.crew_pos == b2.pos:
         print("SUCCES: Crew member reached!")
         break
 print("Saving gif...")

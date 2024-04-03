@@ -14,8 +14,8 @@ COMPUTE_LIMIT = 5000
 '''
     # TODO
     after creating the divisions grid, we're going to need a few more things:
-        - i think there's a problem with the random movements, it's not getting taken care of properly
-        - something's fishy about this thing
+        - fix the moving in and out of the destination cell
+        - maybe reduce the impact of the distance normalization?
         - path planning, that muzzammil should take care of
 '''
 
@@ -40,6 +40,130 @@ class Grid2:
         return d
 
 class bot1:
+    def __init__(self, grid, alpha = 0.08, k=2, debug=1):
+        self.grid = grid
+        self.pos = None
+        while self.pos == self.grid.crew_pos or self.pos is None:
+            self.pos = rd.choice(self.grid._grid.get_open_indices())
+        self.alpha = alpha
+        self.debug=debug
+        self.tick=0
+        self.k=k
+
+    def crew_sensor(self):
+        c = rd.random()
+        return c <= np.exp(-self.alpha
+                           * (self.grid.distance_to_crew(self.pos) - 1))
+    def alien_sensor(self):
+        found_alien = 0
+        for j in range(-self.k, self.k + 1):
+            for i in range(-self.k, self.k + 1):
+                if self.grid.grid[j][i].alien_id != -1:
+                    found_alien = 1
+        return found_alien
+
+
+    def update_belief(self, beep, falien):
+        # Crew Belief
+        generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
+        open_cells = self.grid._grid.get_unoccupied_open_indices()
+
+        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+        belief_sum = sum(flat_beliefs)
+        # print(f"1. update belief function, sum of beliefs : {belief_sum}")
+
+        for ci in open_cells:
+            if ci == self.pos:
+                continue
+            gen_res = generative_fn(self.grid.distance(ci, self.pos))
+            if gen_res == 0:
+                pass
+                #print("DANGER!!!")
+                #print(f"Distance: {self.grid.distance(ci, self.pos)}, Beep: {beep}")
+            self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
+        # Normalize
+        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+        belief_sum = sum(flat_beliefs)
+        # print(f"2. update belief function, sum of beliefs : {belief_sum}")
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+
+        # Alien Belief
+
+    def plan_path(self, dest):
+        if self.debug:
+            print("Planning Path...")  # If path is empty we plan one
+        self.path = deque([])
+        self.grid._grid.remove_all_traversal()
+        captain_found = False
+        path_tree = PathTreeNode()
+        path_tree.data = self.pos
+        path_deque = deque([path_tree])
+        destination = None
+        visited = set()
+        compute_counter = 0
+        while not captain_found:
+            if len(path_deque) == 0 or compute_counter >= COMPUTE_LIMIT:
+                self.grid.remove_all_traversal()
+                return
+            compute_counter += 1
+            node = path_deque.popleft()
+            ind = node.data
+            if ind in visited:
+                continue
+            visited.add(ind)
+            self.grid._grid.set_traversed(ind)
+            if ind == dest:
+                destination = node
+                break
+            neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
+            for neighbor_ind in neighbors_ind:
+                # Add all possible paths that do not hit an alien
+                if not self.grid._grid.has_alien(neighbor_ind):
+                    new_node = PathTreeNode()
+                    new_node.data = neighbor_ind
+                    new_node.parent = node
+                    node.children.append(new_node)
+            path_deque.extend(node.children)
+        self.grid._grid.remove_all_traversal()
+        if self.debug:
+            print("Planning Done!")
+        reverse_path = []
+        node = destination
+        while node.parent is not None:
+            reverse_path.append(node.data)
+            node = node.parent
+        self.path.extend(reversed(reverse_path))
+        for ind in self.path:
+            self.grid._grid.set_traversed(ind)
+        if self.debug:
+            print("Planned Path")
+
+    def move(self):
+        self.update_belief(self.crew_sensor(), 1)
+
+        neighbors = self.grid._grid.get_open_neighbors(self.pos)
+        neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
+        neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        open_cells = self.grid._grid.get_unoccupied_open_indices()
+
+        self.grid._grid.remove_bot(self.pos)
+        dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        self.plan_path(dest_cell)
+        if len(self.path) != 0:
+            self.pos = self.path[0]
+        elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+            self.pos = rd.choice(neighbors)
+        else:
+            self.pos = neighbors[-1]
+        self.grid._grid.place_bot(self.pos)
+
+        if self.pos != self.grid.crew_pos:
+            self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+
+        self.tick += 1
+
+class bot2:
     def __init__(self, grid, alpha = 0.1, k=2, debug=1):
         self.grid = grid
         self.pos = None
@@ -78,7 +202,7 @@ class bot1:
         maxi = self.divisions[max_y][max_x]
         flag = False
 
-        # TODO: normalize for distance
+        # TODO: maybe decrease the amount you normalize for distance?
         for j, y in enumerate(self.divisions):
             for i, x in enumerate(y):
                 divs = self.divisions[j][i]
@@ -88,6 +212,8 @@ class bot1:
                 if flag == False:
                     old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
                     old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
+                    if old_distance == 0:
+                        old_distance = 1
                     maxi /= old_distance
                     flag = True
 
@@ -96,6 +222,8 @@ class bot1:
 
                 new_distance = self.grid.distance((new_mid_x, new_mid_y), self.pos)
 
+                if new_distance == 0:
+                    new_distance = 1
                 curr_iter_grid_prob = divs / new_distance
 
                 if curr_iter_grid_prob > maxi and divs != 0:
@@ -165,42 +293,18 @@ class bot1:
             return [max, (max_x, max_y), grid_coor]
 
         (upper_x, lower_x), (upper_y, lower_y) = self.find_upper_and_lower(grid_coor[0], grid_coor[1])
-        print(f"upper_x: {upper_x}, lower_x: {lower_x}, upper_y: {upper_y}, lower_y: {lower_y}")
+        # print(f"upper_x: {upper_x}, lower_x: {lower_x}, upper_y: {upper_y}, lower_y: {lower_y}")
 
-        # what if the bot is already in the sub-grid?
-        # TODO: this should work?
-        if (lower_x <= self.pos[0] <= upper_x) and (lower_y <= self.pos[1] <= upper_y):
-            # this means that the bot is already in the sub-grid
-            maxi = 0
-            max_x, max_y = self.pos[0], self.pos[1]
-            for x in range(lower_x, upper_x + 1):
-                for y in range(lower_y, upper_y + 1):
-                    curr_cell = self.grid.grid[y][x]
-                    if curr_cell.open == True and curr_cell.crew_belief > maxi:
-                        maxi = self.grid.grid[y][x].crew_belief
-                        max_x, max_y = x, y
+        maxi = 0
+        max_x, max_y = self.pos[0], self.pos[1]
+        for x in range(lower_x, upper_x + 1):
+            for y in range(lower_y, upper_y + 1):
+                curr_cell = self.grid.grid[y][x]
+                if curr_cell.open == True and curr_cell.crew_belief > maxi:
+                    maxi = self.grid.grid[y][x].crew_belief
+                    max_x, max_y = x, y
 
-            return [maxi, (max_x, max_y), grid_coor]
-
-        # now we have to find the center cell AND make sure that it's not a wall 
-        mid_x, mid_y = int((upper_x + lower_x) / 2), int((upper_y + lower_y) / 2)
-        print(f"Before finding the 'open cell',\nmid_x: {mid_x}\nmid_y: {mid_y}")
-        is_valid = lambda x, y: True if (0 <= x <= 34 and 0 <= y <= 34) else False
-        deq = deque([(mid_x, mid_y)])
-
-        while self.grid.grid[mid_y][mid_x].open == False:
-            # keep finding other cells (go through the neighbors till you get something?)
-            # print(mid_x, mid_y)
-            mid_x, mid_y = deq.popleft()
-            neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-            for neighbor in neighbors:
-                n_x, n_y = mid_x + neighbor[0], mid_y + neighbor[1]
-                if is_valid(n_x, n_y):
-                    deq.append((n_x, n_y))
-
-        print(f"After finding the 'open cell',\nmid_x: {mid_x}\nmid_y: {mid_y}")
-        return [max_belief, (mid_x, mid_y), grid_coor]
-    
+        return [maxi, (max_x, max_y), grid_coor]  
 
     def update_belief(self, beep, falien):
         '''
@@ -332,7 +436,7 @@ def plot_world_state(grid, bot, grid_coor):
     open_cells = grid._grid.get_unoccupied_open_indices()
     beliefs_flat = [grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells]
     max_belief = max(beliefs_flat)
-    print(f"Max Belief: {max_belief}")
+    # print(f"Max Belief: {max_belief}")
     for j in range(grid.D):
         grid_img.append([])
         for i in range(grid.D):
@@ -348,40 +452,75 @@ def plot_world_state(grid, bot, grid_coor):
                 grid_img[-1].append(white)
     
 
-    plt.figure(figsize=(9, 8))
-    fig_manager = plt.get_current_fig_manager()
-    # Set the size and position of the window using the window attribute
-    fig_manager.window.geometry("+{x_position}+{y_position}".format(x_position=0, y_position=0))
-    for i in range(7, 35, 7):
-        plt.axhline(i-0.5, color='white', linewidth=2)
-        plt.axvline(i-0.5, color='white', linewidth=2)
+    # plt.figure(figsize=(9, 8))
+    # fig_manager = plt.get_current_fig_manager()
+    # # Set the size and position of the window using the window attribute
+    # fig_manager.window.geometry("+{x_position}+{y_position}".format(x_position=0, y_position=0))
+    # for i in range(7, 35, 7):
+    #     plt.axhline(i-0.5, color='white', linewidth=2)
+    #     plt.axvline(i-0.5, color='white', linewidth=2)
 
-    text = f"Fig 1. Subgrid the bot should head to: {grid_coor[0], grid_coor[1]}"
-    x = 0.5 # horizontally centered
-    y = -0.11 # near the bottom of the image
-    plt.gca().text(x, y, text, ha='center', va='bottom', \
-                   fontsize=10, transform=plt.gca().transAxes)
-    plt.imshow(grid_img)
-    plt.show()
+    # text = f"Fig 1. Subgrid the bot should head to: {grid_coor[0], grid_coor[1]}"
+    # x = 0.5 # horizontally centered
+    # y = -0.11 # near the bottom of the image
+    # plt.gca().text(x, y, text, ha='center', va='bottom', \
+    #                fontsize=10, transform=plt.gca().transAxes)
+    # plt.imshow(grid_img)
+    # plt.show()
 
-g = Grid2()
-b = bot1(g)
-MAX_TURNS = 200
-turns = 0
-for _ in range(MAX_TURNS):
-    plt.close('all')
-    print(f"Turn {_}")
-    grid_coor = b.move()
-    plot_world_state(g, b, grid_coor)
-    plt.savefig(f"tmp{_}.png", dpi=200)
-    gif_coll.append(Image.open(f"tmp{_}.png"))
-    turns += 1
-    if g.crew_pos == b.pos:
-        print("SUCCES: Crew member reached!")
-        break
-print("Saving gif...")
-#gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
-os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
-for _ in range(turns):
-    os.remove(f"tmp{_}.png")
-print("hello")
+bot1_success = []
+bot2_success = []
+
+for i in range(100):
+    g = Grid2()
+    b1 = bot1(g, debug=False)
+    b2 = bot2(g, debug=False)
+    MAX_TURNS = 200
+    turns = 0
+
+    print(f"Currently at iteration {i}")
+
+    for _ in range(MAX_TURNS):
+        # plt.close('all')
+        # print(f"Turn {_}")
+        grid_coor = b2.move()
+        # plot_world_state(g, b2, grid_coor)
+        # plt.savefig(f"tmp{_}.png", dpi=200)
+        # gif_coll.append(Image.open(f"tmp{_}.png"))
+        turns += 1
+        if g.crew_pos == b2.pos:
+            # print("SUCCES: Crew member reached!")
+            break
+    bot2_success.append(turns)
+
+    turns = 0
+    for _ in range(MAX_TURNS):
+        b1.move()
+        turns += 1
+        if g.crew_pos == b1.pos:
+            # print("SUCCESS: Crew member reached!")
+            break
+
+    bot1_success.append(turns)
+
+print(f"Bot 1 success list: {bot1_success}")
+print(f"Bot 2 success list: {bot2_success}")
+
+bot1_success_rate = sum([steps for steps in bot1_success if steps < 200]) / 100
+bot2_success_rate = sum([steps for steps in bot2_success if steps < 200]) / 100
+
+bot1_avg = sum(bot1_success) / 100
+bot2_avg = sum(bot2_success) / 100
+
+print(f"The success rate of bot 1 is: {bot1_success_rate}")
+print(f"The success rate of bot 2 is: {bot2_success_rate}")
+
+print(f"The average number of steps taken by bot 1 are: {bot1_avg}")
+print(f"The average number of steps taken by bot 2 are: {bot2_avg}")
+
+# print("Saving gif...")
+# #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
+# os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
+# for _ in range(turns):
+#     os.remove(f"tmp{_}.png")
+# print("hello")
