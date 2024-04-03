@@ -285,9 +285,8 @@ class bot1:
                 break
             neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
             for neighbor_ind in neighbors_ind:
-                # Add all possible paths that start with no aliens nearby and go through paths with a low
-                # alien probability
-                if ( self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0 ) or (compute_counter > 1):
+                # Add all possible paths that start with no aliens nearby
+                if (self.grid.grid[neighbor_ind[1]][neighbor_ind[0]].alien_belief == 0) or (compute_counter > 2):
                     new_node = PathTreeNode()
                     new_node.data = neighbor_ind
                     new_node.parent = node
@@ -319,10 +318,20 @@ class bot1:
         self.plan_path(dest_cell)
         if len(self.path) != 0:
             self.pos = self.path[0]
-        elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
-            self.pos = rd.choice(neighbors)
+        # If no path is found, we automatically shift to evasion, and the evasion strategy is basic
+        # Go to the cell with the lowest alien probability
         else:
-            self.pos = neighbors[-1]
+            if self.debug:
+                print("Evasion!!")
+            neighbors = self.grid._grid.get_neighbors(self.pos)
+            open_neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open]
+            open_neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].alien_belief)
+            self.pos = open_neighbors[0]
+        #elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+        #    self.pos = rd.choice(neighbors)
+        #else:
+        #    self.pos = neighbors[-1]
+        
         self.grid._grid.place_bot(self.pos)
         
         if self.pos != self.grid.crew_pos:
