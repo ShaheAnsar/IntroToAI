@@ -323,13 +323,14 @@ for _ in range(MAX_TURNS):
     #plt.show()
     a.move()
     # plot_world_state(g, b)
-    plt.savefig(f"tmp{_}.png", dpi=200)
+    # plt.savefig(f"tmp{_}.png", dpi=200)
     #plt.show()
-    gif_coll.append(Image.open(f"tmp{_}.png"))
+    # gif_coll.append(Image.open(f"tmp{_}.png"))
     turns += 1
     if g.crew_pos == b.pos:
         print("SUCCES: Crew member reached!")
         break
+
 print("Saving gif...")
 #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
 os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")

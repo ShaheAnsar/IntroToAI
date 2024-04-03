@@ -671,33 +671,30 @@ for i in range(200):
     g = Grid2()
     b1 = bot1(g, debug=False)
     b2 = bot2(g, debug=False)
+    a = Alien(g._grid)
+    alien_pos = a
+
     MAX_TURNS = 200
     turns = 0
 
     print(f"Currently at iteration {i}")
 
     for _ in range(MAX_TURNS):
-        # plt.close('all')
-        # print(f"Turn {_}")
-        grid_coor = b2.move()
-        # plot_world_state(g, b2, grid_coor)
-        # plt.savefig(f"tmp{_}.png", dpi=200)
-        # gif_coll.append(Image.open(f"tmp{_}.png"))
-        turns += 1
-        if g.crew_pos == b2.pos:
-            # print("SUCCES: Crew member reached!")
-            break
-    bot2_success.append(turns)
-
-    turns = 0
-    for _ in range(MAX_TURNS):
         b1.move()
         turns += 1
         if g.crew_pos == b1.pos:
-            # print("SUCCESS: Crew member reached!")
             break
-
     bot1_success.append(turns)
+
+    turns = 0
+    for _ in range(MAX_TURNS):
+        grid_coor = b2.move()
+        a.move()
+        turns += 1
+        if g.crew_pos == b2.pos:
+            break
+    bot2_success.append(turns)
+
 
 print(f"Bot 1 success list: {bot1_success}")
 print(f"Bot 2 success list: {bot2_success}")
