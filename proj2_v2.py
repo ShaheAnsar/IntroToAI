@@ -723,60 +723,50 @@ for k in range(2, 10, 2):
 
     for i in range(200):
         g = Grid2()
-        b1 = bot1(g, debug=False, k=k)
-        bot_position = b1.pos
-        crew_position = g.crew_pos
-        a = Alien(g._grid)
+        b1 = bot1(g, k=k, debug=False)
+        a1 = Alien(g)
         g2 = copy.deepcopy(g)
-        alien_pos = a.ind
-        print(f"alien at position {alien_pos} for bot 1")
-        MAX_TURNS = 500
+
+        bot_pos = b1.pos
+        alien_pos = a1.ind
+        a2 = Alien(g2, alien_pos)
         turns = 0
         dead = False
 
-        if i % 100 == 0:
-            print(f"Currently at iteration {i} for k = {k}")
-
-        for _ in range(MAX_TURNS):
+        for _ in range(500):
             dead = b1.move()
-            a.move()
+            a1.move()
             turns += 1
-            if g.crew_pos == b1.pos:
+
+            if dead or b1.pos == g.crew_pos:
                 break
         
-        plot_world_state(g, b1)
-        plt.close()
-        if not dead:
-            bot1_success.append(turns)
-        else:
+        if dead:
+            # this means that the bot died
+            dead = False
             bot1_deaths += 1
-
-        # g._grid.reset_grid()
-        # open_cells = g._grid.get_open_indices()
-        # for ci in open_cells:
-        #     g.grid[ci[1]][ci[0]].crew_belief = 1.0
-
-        b2 = bot2(g2, debug=False, k=k, bot_pos=bot_position, crew=crew_position)
-        turns = 0
-        dead = False
-        del a
-        a = Alien(g2._grid, indi=alien_pos)
-        print(f"alien at position {a.ind} for bot 2")
-
-        for _ in range(MAX_TURNS):
-            dead, grid_coor = b2.move()
-            a.move()
-            if _ % 2 == 0:
-                plot_world_state(g, b2, grid_coor)
-                plt.close()
-            turns += 1
-            if g.crew_pos == b2.pos:
-                break
-            
-        if not dead:
-            bot2_success.append(turns)
         else:
+            bot1_success.append(turns)
+
+        plot_world_state(g, b1)
+        turns = 0
+        b2 = bot2(g2, k=k, bot_pos=bot_pos)
+
+        for _ in range(500):
+            dead, grid_coor = b2.move()
+            a1.move()
+            turns += 1
+            plot_world_state(g2, b2, grid_coor)
+            if dead or b2.pos == g.crew_pos:
+                break
+        
+        if dead:
+            # this means that the bot died
+            dead = False
             bot2_deaths += 1
+        else:
+            bot2_success.append(turns)
+
 
     print(f"For k: {k}")
     print(f"Bot 1 success list: {bot1_success}")
