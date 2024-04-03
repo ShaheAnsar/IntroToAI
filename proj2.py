@@ -133,7 +133,7 @@ class bot1:
                             new_div_belief += self.divisions[dy][dx]
                         
                         curr_max_diagonals = [(max_x + d[0], max_y + d[1]) for d in diagonals \
-                                              if is_valid(max_x + d[0], max_y + d[1]) is not None]
+                                              if is_valid(max_x + d[0], max_y + d[1])]
                         
                         for dx, dy in curr_max_diagonals:
                             curr_max_div_belief += self.divisions[dy][dx]
