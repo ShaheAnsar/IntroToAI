@@ -33,15 +33,6 @@ class Grid2:
             d2 = self.distance(self.crew_pos2, pos)
 
         return d1, d2
-        
-        # if self.crew_pos is not None:
-        #     d1 = self.distance(self.crew_pos, self.pos)
-        # d2 = self.distance(self.crew_pos2, self.pos)
-
-        # if d1 is not None:
-        #     return d1, d2
-        # else:
-        #     return d2
 
 class bot3:
     def __init__(self, grid, alpha = 0.1, k=5, debug=1):
