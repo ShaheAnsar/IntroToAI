@@ -67,7 +67,7 @@ class bot1:
     def find_upper_and_lower(self, grid_x, grid_y):
         upper_x, lower_x = (grid_x * 7) + 6, grid_x * 7
         upper_y, lower_y = (grid_y * 7) + 6, grid_y * 7
-        
+
         return ((upper_x, lower_x), (upper_y, lower_y))
     
     def sub_max_belief(self):
@@ -181,17 +181,19 @@ class bot1:
             return [maxi, (max_x, max_y)]
 
         # now we have to find the center cell AND make sure that it's not a wall 
-        mid_x, mid_y = (upper_x + lower_x) / 2, (upper_y + lower_y) / 2
+        mid_x, mid_y = int((upper_x + lower_x) / 2), int((upper_y + lower_y) / 2)
         is_valid = lambda x, y: True if (0 <= x <= 34 and 0 <= y <= 34) else False
-        deq = deque((mid_x, mid_y))
+        deq = deque([(mid_x, mid_y)])
 
         while self.grid.grid[mid_x][mid_y].open == False:
             # keep finding other cells (go through the neighbors till you get something?)
+            # print(mid_x, mid_y)
             mid_x, mid_y = deq.popleft()
-            neighbor = [(0, -1), (0, 1), (-1, 0), (1, 0)]
-            n_x, n_y = mid_x + neighbor[0], mid_y + neighbor[1]
-            if is_valid(n_x, n_y):
-                deq.append((n_x, n_y))
+            neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)]
+            for neighbor in neighbors:
+                n_x, n_y = mid_x + neighbor[0], mid_y + neighbor[1]
+                if is_valid(n_x, n_y):
+                    deq.append((n_x, n_y))
 
         return [max_belief, (mid_x, mid_y)]
 
@@ -223,8 +225,6 @@ class bot1:
                 probability = 0
                 num_open_cells = 0
 
-                print(old_lower_x, old_upper_x, old_lower_y, old_upper_y)
-
                 for x1 in range(old_lower_x, old_upper_x + 1):
                     for y1 in range(old_lower_y, old_upper_y + 1):
                         if self.grid.grid[y1][x1].open == True:
@@ -251,7 +251,7 @@ class bot1:
         compute_counter = 0
         while not captain_found:
             if len(path_deque) == 0 or compute_counter >= COMPUTE_LIMIT:
-                self.grid.remove_all_traversal()
+                self.grid._grid.remove_all_traversal()
                 return
             compute_counter += 1
             node = path_deque.popleft()
