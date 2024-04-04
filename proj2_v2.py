@@ -279,13 +279,13 @@ class bot1:
             return True
 
 class bot2:
-    def __init__(self, grid, alpha = 0.1, k=2, debug=1, bot_pos=None, crew=None):
+    def __init__(self, grid, alpha = 0.1, k=2, debug=1, bot_pos=None):
         self.grid = grid
         self.pos = None
         while self.pos == self.grid.crew_pos or self.pos is None:
             self.pos = rd.choice(self.grid._grid.get_open_indices()) if \
                 bot_pos == None else bot_pos
-        self.grid.crew_pos = self.grid.crew_pos if crew == None else crew
+        self.grid.crew_pos = self.grid.crew_pos
         self.alpha = alpha
         self.debug=debug
         self.tick=0
@@ -299,6 +299,7 @@ class bot2:
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].crew_belief = 1.0 / len(open_cells)  # Set to uniform distribution
             self.grid.grid[ci[1]][ci[0]].alien_belief = 1.0 / len(open_cells)  # Set to uniform distribution
+            self.grid.grid[ci[1]][ci[0]].alien_id = -1
 
         # Reset the divisions (if needed)
         self.divisions = [[1.0 for i in range(5)] for i in range(5)]
@@ -364,13 +365,13 @@ class bot2:
 
                 (old_upper_x, old_lower_x), (old_upper_y, old_lower_y) = self.find_upper_and_lower(max_x, max_y)
 
-                # if flag == False:
-                #     old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
-                #     old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
-                #     if old_distance == 0:
-                #         old_distance = 1
-                #     maxi /= (old_distance / 2)
-                #     flag = True
+                if flag == False:
+                    old_mid_x, old_mid_y = (old_upper_x + old_lower_x) / 2, (old_upper_y + old_lower_y) / 2
+                    old_distance = self.grid.distance((old_mid_x, old_mid_y), self.pos)
+                    if old_distance == 0:
+                        old_distance = 1
+                    maxi /= (old_distance / 3)
+                    flag = True
 
                 (new_upper_x, new_lower_x), (new_upper_y, new_lower_y) = self.find_upper_and_lower(i, j)
                 new_mid_x, new_mid_y = (new_upper_x + new_lower_x) / 2, (new_upper_y + new_lower_y) / 2
@@ -379,8 +380,8 @@ class bot2:
 
                 if new_distance == 0:
                     new_distance = 1
-                # curr_iter_grid_prob = (divs / new_distance) * 2
-                curr_iter_grid_prob = divs
+                curr_iter_grid_prob = (divs / new_distance) * 3
+                # curr_iter_grid_prob = divs
 
                 if curr_iter_grid_prob > maxi and divs != 0:
                     maxi = self.divisions[j][i]
@@ -775,7 +776,7 @@ def main():
                 plot_world_state(g2, b2, grid_coor)
                 if a2.ind == b2.pos:
                     dead = True
-                if dead or b2.pos == g.crew_pos:
+                if dead or b2.pos == g2.crew_pos:
                     break
             
             if dead:
