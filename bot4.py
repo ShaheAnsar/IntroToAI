@@ -258,7 +258,7 @@ class bot4:
             if self.found_crew != two_cell:
                 gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
 
-            if alien_found:
+            if beep:
                 total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
             else:
                 total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
