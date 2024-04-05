@@ -123,9 +123,10 @@ class bot4:
         self.k=k
         #self.found = False
         self.found_crew = None
+        self.found1 = False
+        self.found2 = False
+        self.found_all_crew = False
         self.switch_to_single = False
-        self.crew_belief_coarse = {}
-        self.crew_belief_fine = {}
 
     def crew_sensor(self):
         c1 = rd.random()
@@ -246,7 +247,7 @@ class bot4:
                 if oc in k and self.grid.beliefs[k] > max_belief:
                     max_belief = self.grid.beliefs[k]
             new_dict[oc] = max_belief
-            self.grid.grid[oc[1]][oc[0]].crew_belief = max_belief
+            self.grid.grid[oc[1]][oc[0]].crew_belief = 1.0 #max_belief
         #total_belief = np.sum([v for _, v in new_dict.items()])
         #for i, k in new_dict:
         #    new_dict[k] = i/total_belief
@@ -271,7 +272,8 @@ class bot4:
             for ci in open_cells:
                 if ci == self.pos:
                     continue
-                gen_res = generative_fn(self.grid.distance(ci, self.pos))
+                dist = self.grid.distance(ci, self.pos)
+                gen_res = generative_fn(dist)
                 if not beep:
                     gen_res = 1.0 - gen_res
                 if gen_res == 0:
@@ -387,7 +389,7 @@ class bot4:
 
         if self.switch_to_single:
             dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
-            print(f"Dest Cell: {dest_cell}, Actual Crew: {self.grid.crew_pos}")
+            print(f"Dest Cell: {dest_cell}, Actual Crew: {self.grid.crew_pos}, Current Pos: {self.pos}, Distance to Crew: {self.grid.distance_to_crew(self.pos)}")
         else:
             max_belief = max(self.grid.beliefs.values())
             sorted_positions = [key for key in self.grid.beliefs.keys()]
@@ -429,13 +431,19 @@ class bot4:
                     del self.grid.beliefs[k]
             
             if self.pos == self.grid.crew_pos:
+                self.found1 = True
                 self.update_helper(1)
                 self.grid.crew_pos = self.grid.crew_pos2
+                self.grid.crew_pos2 = None
             elif self.pos == self.grid.crew_pos2:
+                self.found2 = True
                 self.update_helper(2)
+                self.grid.crew_pos2 = None
         else:
             if self.pos != self.grid.crew_pos:
                 self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+            else:
+                self.found_all_crew = True
 
         self.tick += 1
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
@@ -468,7 +476,8 @@ class World:
                 self.a.move()
                 turns += 1
                 print(turns)
-                if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
+                #if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
+                if self.b.found_all_crew:
                     print(f"It took {_} steps to find both the crew members")
                     break
                     
