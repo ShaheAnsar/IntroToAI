@@ -72,6 +72,9 @@ class Grid2:
 
         return d1, d2
 
+    def subgrid_index(div, pos):
+
+
 class bot3:
     def __init__(self, grid, alpha = 0.1, k=5, debug=1):
         self.grid = grid
