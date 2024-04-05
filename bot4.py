@@ -265,7 +265,7 @@ class bot4:
         #    self.grid.beliefs[key] *= 1 / sum_beliefs
 
     def update_belief(self, beep, alien_found):
-        generative_fn = lambda x: np.exp(-self.alpha * (x - 1))# if beep else (1 - (np.exp(-self.alpha * (x - 1))))
+        generative_fn = lambda x: exp(-self.alpha * (x - 1))# if beep else (1 - (np.exp(-self.alpha * (x - 1))))
         if self.switch_to_single:
             open_cells = self.grid._grid.get_open_indices()
             for ci in open_cells:
@@ -291,15 +291,15 @@ class bot4:
                 one_cell, two_cell = key
                 gen_crew_one, gen_crew_two = 0, 0
 
-            gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos))
-            gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
-            if beep:
-                total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
-            else:
-                total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
-                total_prob = 1 - total_prob
+                gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos))
+                gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
+                if beep:
+                    total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+                else:
+                    total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+                    total_prob = 1 - total_prob
 
-                self.grid.beliefs[(one_cell, two_cell)] *= total_prob
+                    self.grid.beliefs[(one_cell, two_cell)] *= total_prob
 
 
             # Normalize
@@ -457,6 +457,7 @@ class World:
     def simulate(self):
         bot_steps = []
         for i in range(40):
+            self.reset()
             MAX_TURNS = 1000
             turns = 0
         
