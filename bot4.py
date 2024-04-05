@@ -298,8 +298,7 @@ class bot4:
                 else:
                     total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
                     total_prob = 1 - total_prob
-
-                    self.grid.beliefs[(one_cell, two_cell)] *= total_prob
+                self.grid.beliefs[(one_cell, two_cell)] *= total_prob
 
 
             # Normalize
