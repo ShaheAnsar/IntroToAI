@@ -6,4 +6,6 @@
 *.venv
 \[
 proj2.py
+__pycache__/*
+*.log
 

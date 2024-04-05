@@ -6,10 +6,28 @@ import random
 import random as rd
 from PIL import Image
 from collections import deque
+from math import exp
 import os
+import multiprocessing as mp
+from multiprocessing import Pool
 
 D = 35
 COMPUTE_LIMIT = 5000
+
+def grid_sum(D, num_g):
+    s = 0
+    for j in range(D):
+        for i in range(D):
+            s += num_g[j][i]
+    return s
+
+def zeros(x, y):
+    ret = []
+    for j in range(y):
+        ret.append([])
+        for i in range(x):
+            ret[-1].append(0)
+    return ret
 
 class Alien:
     # This alien_id is used to keep track of every alien
@@ -30,7 +48,7 @@ class Alien:
         neighbors_without_aliens = [neighbor for neighbor in neighbors if self.grid.grid[neighbor[1]][neighbor[0]].alien_id == -1]
         # Randomly choose any of the locations
         if len(neighbors_without_aliens) > 0:
-            rand_ind = np.random.randint(0, len( neighbors_without_aliens ))
+            rand_ind = rd.randint(0, len( neighbors_without_aliens ) - 1)
             self.grid.remove_alien(self.ind)
             self.ind = neighbors_without_aliens[rand_ind]
             self.grid.place_alien(self.ind, self.alien_id)
@@ -58,17 +76,18 @@ class Grid2:
             c = rd.choice(self._grid.get_open_indices())
         self.crew_pos2 = c
         self.alpha = 0.1
-        X = np.arange(0, 35)
-        Y = np.arange(0, 35)
+        X = range(self.D)
+        Y = range(self.D)
         prob_grid = []
         for j in range(self.D):
             prob_grid.append([])
             for i in range(self.D):
-                p1 = np.exp(-self.alpha * self.distance(self.crew_pos, (i, j)))
-                p2 = np.exp(-self.alpha * self.distance(self.crew_pos2, (i, j)))
+                p1 = exp(-self.alpha * self.distance(self.crew_pos, (i, j)))
+                p2 = exp(-self.alpha * self.distance(self.crew_pos2, (i, j)))
                 ptotal = p1 + p2 - p1*p2
                 prob_grid[-1].append(ptotal)
-        prob_sum = np.sum(prob_grid)
+        #prob_sum = np.sum(prob_grid)
+        prob_sum = grid_sum(self.D, prob_grid)
         for j in Y:
             for i in X:
                 prob_grid[j][i] /= prob_sum
@@ -112,9 +131,9 @@ class bot4:
         a, b = False, False
 
         if d1 is not None:
-            a = c1 <= np.exp(-self.alpha* (d1 - 1))
+            a = c1 <= exp(-self.alpha* (d1 - 1))
         if d2 is not None:
-            b = c2 <= np.exp(-self.alpha* (d2 - 1))
+            b = c2 <= exp(-self.alpha* (d2 - 1))
 
         return a or b
     
@@ -154,36 +173,6 @@ class bot4:
                     break
         return found_alien == 1
     
-    # def diffuse_alien_prob(self, choose_fun):
-        # open_cells = self.grid._grid.get_open_indices()
-        # filtered_open_cells = [oc for oc in open_cells if choose_fun(oc)]
-        # alien_belief = np.zeros((self.grid.D, self.grid.D))
-        # for ci in filtered_open_cells:
-            # neighbors = self.grid._grid.get_neighbors(ci)
-            # neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n)]
-            # for n in neighbors:
-                # alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
-        # total_belief = np.sum(alien_belief)
-        # for ci in open_cells:
-            # alien_belief[ci[1]][ci[0]] /= total_belief
-        # for ci in open_cells:
-            # self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
-
-    # def restrict_alien_prob(self, choose_fun):
-        # open_cells = self.grid._grid.get_open_indices()
-        # for i in open_cells:
-            # if not choose_fun(i):
-                # print("Seems to work")
-        # filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
-        # print(f"Cells to set to 0: {len(filtered_open_cells)}")
-        # for ci in filtered_open_cells:
-            # print("Setting to 0")
-            # self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
-        # total_belief = 0
-        # for ci in open_cells:
-            # total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
-        # for ci in open_cells:
-            # self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
 
     def diffuse_alien_prob(self, alien_found):
         choose_fun = None
@@ -195,7 +184,7 @@ class bot4:
         # Cells inside the alien sensor and just outside
         # The probability will diffuse among these
         filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
-        alien_belief = np.zeros((self.grid.D, self.grid.D))
+        alien_belief = zeros(self.grid.D, self.grid.D)
 
         # Diffuse through the edge cells
         for ci in filtered_open_cells:
@@ -206,7 +195,7 @@ class bot4:
             for n in neighbors:
                 alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
         # Normalizs
-        total_belief = np.sum(alien_belief)
+        total_belief = grid_sum(self.grid.D, alien_belief)
         for ci in open_cells:
             alien_belief[ci[1]][ci[0]] /= total_belief
         # Update the original probabilities
@@ -232,7 +221,7 @@ class bot4:
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
 
-    def update_helper(self, crew_member: int):
+    def update_helper(self, crew_member):
         '''
             this resets the probability after one of the crew members has been found
         '''
@@ -255,7 +244,7 @@ class bot4:
 
     def update_belief(self, beep, alien_found):
         # Crew Belief
-        generative_fn = lambda x: np.exp(-self.alpha * (x - 1)) if beep else (1 - (np.exp(-self.alpha * (x - 1))))
+        generative_fn = lambda x: exp(-self.alpha * (x - 1)) #if beep else (1 - (exp(-self.alpha * (x - 1))))
         
         sum_beliefs = sum(self.grid.beliefs.values())
         
@@ -269,24 +258,23 @@ class bot4:
             if self.found_crew != two_cell:
                 gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
 
-            total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+            if alien_found:
+                total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+            else:
+                total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+                total_prob = 1 - total_prob
 
             self.grid.beliefs[(one_cell, two_cell)] *= total_prob
 
 
         # Normalize
-        # flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
-        # belief_sum = sum(flat_beliefs)
-        # for ci in open_cells:
-            # self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
-
         sum_beliefs = sum(self.grid.beliefs.values())
         for key, value in self.grid.beliefs.items():
             self.grid.beliefs[key] = value / sum_beliefs
 
         # Alien Belief
 
-        alien_belief = np.zeros(( self.grid.D, self.grid.D ))
+        alien_belief = zeros(self.grid.D, self.grid.D)
         self.diffuse_alien_prob(alien_found)
         self.restrict_alien_prob(alien_found)
         #print("Alien detected" if alien_found else "Alien Not Detected")
@@ -410,23 +398,44 @@ class bot4:
             self.update_helper(2)
             self.grid.crew_pos2 = None
 
-        # if self.found:
-            # open_cells = self.grid._grid.get_open_indices()
-            # open_cells = [cells for cells in open_cells if self.grid.grid[cells[1]][cells[0]].crew_belief != 0]
-            # count = 0
-            # for cell in open_cells:
-                # x, y = cell
-                # self.grid.grid[y][x].crew_belief = 1
-                # count += 1
-            # for cell in open_cells:
-                # x, y = cell
-                # self.grid.grid[y][x].crew_belief /= count
-            # self.found = False
         self.tick += 1
 
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
             print("Success!")
             pass
+class World:
+    def __init__(self, b):
+        self.grid = Grid2()
+        self.a = Alien(self.grid._grid)
+        self.b = b(self.grid)
+        self.b_fun = b
+
+    def reset(self):
+        self.grid = Grid2()
+        self.a = Alien(self.grid._grid)
+        self.b = self.b_fun(self.grid)
+
+    def simulate(self):
+        bot_steps = []
+        for i in range(40):
+            MAX_TURNS = 1000
+            turns = 0
+        
+            print(f"We're currently at iteration {i}")
+            
+            for _ in range(MAX_TURNS):
+                # print(f"Turn {_}")
+                self.b.move()
+                self.a.move()
+                turns += 1
+                print(turns)
+                if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
+                    print(f"It took {_} steps to find both the crew members")
+                    break
+                    
+            bot_steps.append(turns)
+
+            print(bot_steps)
 
 gif_coll = []
 def plot_world_state(grid, bot):
@@ -522,27 +531,29 @@ def plot_world_state(grid, bot):
 # print("hello")
 
 
-bot4_steps = []
-
-for i in range(40):
-    g = Grid2()
-    b = bot4(g, debug=False)
-    a = Alien(g._grid)
-    MAX_TURNS = 1000
-    turns = 0
-
-    print(f"We're currently at iteration {i}")
-    
-    for _ in range(MAX_TURNS):
-        # print(f"Turn {_}")
-        b.move()
-        a.move()
-        turns += 1
-        print(turns)
-        if g.crew_pos == None and g.crew_pos2 == None:
-            print(f"It took {_} steps to find both the crew members")
-            break
-            
-    bot4_steps.append(turns)
-
-print(bot4_steps)
+#bot4_steps = []
+#
+#for i in range(40):
+#    g = Grid2()
+#    b = bot4(g, debug=False)
+#    a = Alien(g._grid)
+#    MAX_TURNS = 1000
+#    turns = 0
+#
+#    print(f"We're currently at iteration {i}")
+#    
+#    for _ in range(MAX_TURNS):
+#        # print(f"Turn {_}")
+#        b.move()
+#        a.move()
+#        turns += 1
+#        print(turns)
+#        if g.crew_pos == None and g.crew_pos2 == None:
+#            print(f"It took {_} steps to find both the crew members")
+#            break
+#            
+#    bot4_steps.append(turns)
+#
+#print(bot4_steps)
+w = World(bot4)
+w.simulate()
