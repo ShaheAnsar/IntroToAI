@@ -302,8 +302,8 @@ class bot3:
         self.tick += 1
 
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
-            print("Success!")
-            exit(1)
+            # print("Success!")
+            pass
 
 gif_coll = []
 def plot_world_state(grid, bot):
