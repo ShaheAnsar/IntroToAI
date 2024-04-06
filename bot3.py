@@ -158,7 +158,7 @@ class bot3:
 
         open_cells = self.grid._grid.get_open_indices()
         filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
-        print(f"Cells to set to 0: {len(filtered_open_cells)}")
+        # print(f"Cells to set to 0: {len(filtered_open_cells)}")
         for ci in filtered_open_cells:
             self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
         # Normalize
@@ -194,7 +194,7 @@ class bot3:
         alien_belief = np.zeros(( self.grid.D, self.grid.D ))
         self.diffuse_alien_prob(alien_found)
         self.restrict_alien_prob(alien_found)
-        print("Alien detected" if alien_found else "Alien Not Detected")
+        # print("Alien detected" if alien_found else "Alien Not Detected")
 
     def plan_path(self, dest):
         if self.debug:
@@ -323,8 +323,8 @@ def plot_world_state(grid, bot):
     alien_beliefs_flat = [grid.grid[oc[1]][oc[0]].alien_belief for oc in open_cells]
     max_belief = max(beliefs_flat)
     max_alien_belief = max(alien_beliefs_flat)
-    print(f"Max Belief: {max_belief}")
-    print(f"Max Alien Belief: {max_alien_belief}")
+    # print(f"Max Belief: {max_belief}")
+    # print(f"Max Alien Belief: {max_alien_belief}")
     for j in range(grid.D):
         grid_img.append([])
         grid_img2.append([])

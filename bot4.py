@@ -220,7 +220,7 @@ class bot4:
         for ci in open_cells:
             self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
 
-    def update_helper(self, crew_member: int):
+    def update_helper(self, crew_member):
         '''
             this resets the probability after one of the crew members has been found
         '''
@@ -337,7 +337,7 @@ class bot4:
             consolidated_prob[k[1]] += v
         overall_probs = list(consolidated_prob)
         overall_probs.sort(key=lambda x: consolidated_prob[x])
-        print(f"Highest indices: {overall_probs[-1:-10:-1]}")
+        # print(f"Highest indices: {overall_probs[-1:-10:-1]}")
 
     def move(self):        
         beep = self.crew_sensor()
@@ -401,7 +401,7 @@ class bot4:
         self.tick += 1
 
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
-            print("Success!")
+            # print("Success!")
             pass
 
 gif_coll = []
@@ -423,7 +423,7 @@ def plot_world_state(grid, bot):
     max_belief = max(beliefs_flat)
     max_alien_belief = max(alien_beliefs_flat)
     # print(f"Max Belief: {max_belief}")
-    print(f"Max Alien Belief: {max_alien_belief}")
+    # print(f"Max Alien Belief: {max_alien_belief}")
     for j in range(grid.D):
         grid_img.append([])
         grid_img2.append([])

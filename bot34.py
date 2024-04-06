@@ -3,6 +3,7 @@ from bot4 import plot_world_state
 from bot4 import Alien
 from bot4 import bot4
 from bot3 import bot3
+from time import time
 import copy
 
 def main():
@@ -11,7 +12,8 @@ def main():
         bot1_deaths, bot2_deaths = 0, 0
         bot2_success = []
 
-        for i in range(1):
+
+        for _ in range(1):
             g = Grid2(bot=4, debug=False)
             b1 = bot3(g, k=k, debug=False)
             bot_pos = b1.pos
@@ -24,6 +26,7 @@ def main():
             turns = 0
             dead = False
 
+            start = time()
             for _ in range(500):
                 dead = b1.move()
                 a1.move()
@@ -41,14 +44,19 @@ def main():
                 bot1_deaths += 1
             else:
                 bot1_success.append(turns)
+            
+            end = time()
 
+            print("bot 3 complete. moving on to bot 4...")
+            print(f"it took bot 3 {end - start} seconds to run")
             turns = 0
             b2 = bot4(g2, k=k, bot_pos=bot_pos, debug=False)
             b2.reset_beliefs()
             del a1
             
+            start = time()
             for _ in range(500):
-                dead, grid_coor = b2.move()
+                dead = b2.move()
                 a2.move()
                 turns += 1
                 plot_world_state(g2, b2)
@@ -64,25 +72,30 @@ def main():
             else:
                 bot2_success.append(turns)
 
+            end = time()
+            print(f"it took bot 4 {end - start} seconds to run")
+            print()
+
+
 
         print(f"For k: {k}")
         print(f"Bot 1 success list: {bot1_success}")
         print(f"Bot 2 success list: {bot2_success}")
         print()
 
-        bot1_success_rate = len(bot1_success) / 200
-        bot2_success_rate = len(bot2_success) / 200
+        # bot1_success_rate = len(bot1_success) / 200
+        # bot2_success_rate = len(bot2_success) / 200
 
         bot1_avg = sum(bot1_success) / 200
         bot2_avg = sum(bot2_success) / 200
 
-        print(f"The success rate of bot 1 is: {bot1_success_rate}")
-        print(f"The success rate of bot 2 is: {bot2_success_rate}")
-        print()
+        # print(f"The success rate of bot 1 is: {bot1_success_rate}")
+        # print(f"The success rate of bot 2 is: {bot2_success_rate}")
+        # print()
 
-        print(f"Bot 1 died {bot1_deaths} times")
-        print(f"Bot 2 died {bot2_deaths} times")
-        print()
+        # print(f"Bot 1 died {bot1_deaths} times")
+        # print(f"Bot 2 died {bot2_deaths} times")
+        # print()
 
         print(f"The average number of steps taken by bot 1 are: {bot1_avg}")
         print(f"The average number of steps taken by bot 2 are: {bot2_avg}")
