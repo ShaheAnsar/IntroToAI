@@ -169,7 +169,7 @@ class bot3:
         else:
             choose_fun = lambda x: not self.within_alien_sensor(x)
 
-        scale_prob = lambda s, m, n: (-s + sqrt(s**2 - (4 * m * (n - m)))) / (2 * m)
+        scale_prob = lambda s, n: (s / n)
 
         open_cells = self.grid._grid.get_open_indices()
         # Cells inside the alien sensor and just outside
@@ -185,7 +185,7 @@ class bot3:
                  if self.grid.grid[j][i].open == True]
             m = sum([self.grid.grid[cell[1]][cell[0]].alien_belief for cell in m_cells])
             n = s - m
-            alpha = scale_prob(s, m, n)
+            alpha = scale_prob(s, n)
 
             for j in range(self.D):
                 for i in range(self.D):
