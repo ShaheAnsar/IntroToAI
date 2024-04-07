@@ -208,6 +208,8 @@ class Grid:
                 self.grid[j][i].bot_occupied = False
                 self.grid[j][i].captain_slot = False
                 self.grid[j][i].traversed = False
+                self.grid[j][i].crew_belief = 1.0
+                self.grid[j][i].alien_belief = 1.0
 
     def __str__(self):
         s = ""
