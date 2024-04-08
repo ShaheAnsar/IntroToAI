@@ -14,6 +14,7 @@ D=35
 COMPUTE_LIMIT = 5000
 BB_SIZE=70
 ALPHA=0.1
+
 class Alien:
     # This alien_id is used to keep track of every alien
     alien_id = 0
