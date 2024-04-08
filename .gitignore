@@ -5,3 +5,7 @@
 \~*
 *.venv
 \[
+
+ai/
+test.py
+.venv/

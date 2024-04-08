@@ -12,7 +12,7 @@ from multiprocessing import Pool
 
 D=35
 COMPUTE_LIMIT = 5000
-BB_SIZE=40
+BB_SIZE=70
 ALPHA=0.1
 class Alien:
     # This alien_id is used to keep track of every alien
@@ -41,18 +41,25 @@ class Alien:
             self.grid.place_alien(self.ind, self.alien_id)
 
 class Grid2:
-    def __init__(self, D=35, debug=1, crew_pos=None):
+    def __init__(self, D=35, debug=1, o_crew_pos1=None, o_crew_pos2=None):
         self._grid = Grid(D, debug=debug - 1>0)
         self.D = D
         self.grid = self._grid.grid
-        self.crew_pos = rd.choice(self._grid.get_open_indices()) if crew_pos is None else crew_pos
+        self.crew_pos = rd.choice(self._grid.get_open_indices()) if o_crew_pos1 is None else o_crew_pos1
+        self.crew_pos2 = None if o_crew_pos2 is None else o_crew_pos2
+        while self.crew_pos2 is None or self.crew_pos2 == self.crew_pos:
+            self.crew_pos2 = rd.choice(self._grid.get_open_indices())
+
+
     def distance(self, pos1, pos2):
         d = abs(pos1[1] - pos2[1])
         d += abs(pos1[0] - pos2[0])
         return d
+    
     def distance_to_crew(self, pos):
         d = self.distance(self.crew_pos, pos)
         return d
+    
     def reset_grid(self):
         self._grid.reset_grid()
 
@@ -86,9 +93,18 @@ class bot1:
 
  
     def crew_sensor(self):
-        c = rd.random()
-        return c <= np.exp(-self.alpha
-                           * (self.grid.distance_to_crew(self.pos) - 1))
+        beep = lambda x: np.exp(-self.alpha * (self.grid.distance_to_crew(self.pos) - 1))
+        c1 = rd.random()
+        c2 = rd.random()
+
+        d1 = self.grid.distance(self.pos, self.grid.crew_pos)
+        d2 = self.grid.distance(self.pos, self.grid.crew_pos2)
+
+        c = (c1 <= beep(d1)) or (c2 <= beep(d2))
+
+        return c
+
+
     def alien_sensor(self):
         found_alien = 0
         for j in range(-self.k, self.k + 1):
@@ -231,6 +247,7 @@ class bot1:
             self.grid._grid.set_traversed(ind)
         if self.debug:
             print("Planned Path")
+
     def move(self):
         self.update_belief(self.crew_sensor(), self.alien_sensor())
 
@@ -260,8 +277,12 @@ class bot1:
         
         self.grid._grid.place_bot(self.pos)
         
-        if self.pos != self.grid.crew_pos:
+        if self.pos != self.grid.crew_pos and self.pos != self.grid.crew_pos2:
             self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+        elif self.pos == self.grid.crew_pos:
+            self.grid.crew_pos = None
+        elif self.pos == self.grid.crew_pos2:
+            self.grid.crew_pos2 = None
 
         if not self.grid._grid.has_alien(self.pos):
             self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
@@ -310,9 +331,17 @@ class bot2:
 
  
     def crew_sensor(self):
-        c = rd.random()
-        return c <= np.exp(-self.alpha
-                           * (self.grid.distance_to_crew(self.pos) - 1))
+        beep = lambda x: np.exp(-self.alpha * (self.grid.distance_to_crew(self.pos) - 1))
+        c1 = rd.random()
+        c2 = rd.random()
+
+        d1 = self.grid.distance(self.pos, self.grid.crew_pos)
+        d2 = self.grid.distance(self.pos, self.grid.crew_pos2)
+
+        c = (c1 <= beep(d1)) or (c2 <= beep(d2))
+
+        return c
+    
     def alien_sensor(self):
         found_alien = 0
         for j in range(-self.k, self.k + 1):
@@ -584,8 +613,12 @@ class bot2:
                 self.pos = open_neighbors[0]
             self.grid._grid.place_bot(self.pos)
         
-        if self.pos != self.grid.crew_pos:
+        if self.pos != self.grid.crew_pos and self.pos != self.grid.crew_pos2:
             self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+        elif self.pos == self.grid.crew_pos:
+            self.grid.crew_pos = None
+        elif self.pos == self.grid.crew_pos2:
+            self.grid.crew_pos2 = None
 
         if not self.grid._grid.has_alien(self.pos):
             self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
@@ -614,7 +647,7 @@ class WorldState:
                 self.fails = [0, 0]
                 self.turns = [0, 0]
                 self.g = Grid2(debug=False)
-                b = bot1(self.g, alpha=alpha, debug=False)
+                b = bot2(self.g, alpha=alpha, debug=False)
                 a = Alien(self.g._grid, b)
                 alien_pos = a.ind
                 bot_pos = b.pos
@@ -638,7 +671,7 @@ class WorldState:
                         #plt.show()
                         gif_coll.append(Image.open(f"tmp{_}.png"))
                     self.turns[0] += 1
-                    if self.g.crew_pos == b.pos:
+                    if self.g.crew_pos == None and self.g.crew_pos2 == None:
                         print("SUCCES: Crew member reached!")
                         self.runs[0].append(_)
                         break
@@ -656,7 +689,7 @@ class WorldState:
                 #del g
                 self.g.reset_grid()
                 #g = Grid2(debug=False)
-                b = bot2(self.g, alpha=alpha, debug=False, p=bot_pos)
+                b = bot1(self.g, alpha=alpha, debug=False, p=bot_pos)
                 a = Alien(self.g._grid, b, p=alien_pos)
                 for _ in range(self.MAX_TURNS):
                     print(f"Turn {_}")
@@ -677,7 +710,7 @@ class WorldState:
                         #plt.show()
                         gif_coll.append(Image.open(f"tmp{_}.png"))
                     self.turns[1] += 1
-                    if self.g.crew_pos == b.pos:
+                    if self.g.crew_pos == None and self.g.crew_pos2 == None:
                         print("SUCCES: Crew member reached!")
                         self.runs[1].append(_)
                         break
@@ -892,10 +925,11 @@ w = WorldState()
 data, alpha_list = w.simulate()
 plt.xlabel("Alpha")
 plt.ylabel("Avg Turns to Capture")
-plt.plot(alpha_list, data[0], label="Bot1")
-plt.plot(alpha_list, data[1], label="Bot2")
+plt.plot(alpha_list, data[0], label="Bot2")
+plt.plot(alpha_list, data[1], label="Bot1")
+
 plt.legend()
-plt.show()
+plt.savefig(f"bb70.png", dpi=200)
 #print("Bot 1 Output:")
 #print(f"Run output: {w.runs[0]}\nAlienCaptures: {w.captures[0]}\nFails: {w.fails[0]}")
 #print(f"Average steps: {sum(w.runs[0])/len(w.runs[0])}")
