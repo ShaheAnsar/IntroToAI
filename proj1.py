@@ -25,7 +25,7 @@ COMPUTE_LIMIT=10000
 
 class GridAttrib:
     __slots__ = ('open', 'bot_occupied', 'traversed', 'alien_id',
-                 'captain_slot', 'crew_belief', 'alien_belief')
+                 'captain_slot', 'captain_slot_2', 'crew_belief', 'alien_belief')
 
     def __init__(self):
         self.open = False
@@ -33,6 +33,7 @@ class GridAttrib:
         self.traversed = False
         self.alien_id = -1
         self.captain_slot = False
+        self.captain_slot_2 = False
         self.crew_belief = 1.0 # Start out with a uniform belief of 1.0
         self.alien_belief = 1.0 # Start out with a uniform belief of 1.0
 
@@ -207,6 +208,7 @@ class Grid:
                 self.grid[j][i].alien_id = -1
                 self.grid[j][i].bot_occupied = False
                 self.grid[j][i].captain_slot = False
+                self.grid[j][i].captain_slot_2 = False
                 self.grid[j][i].traversed = False
                 self.grid[j][i].crew_belief = 1.0
                 self.grid[j][i].alien_belief = 1.0
@@ -216,7 +218,7 @@ class Grid:
         for j in range(self.D):
             for i in range(self.D):
                 if self.grid[j][i].open == True:
-                    if self.grid[j][i].captain_slot:
+                    if self.grid[j][i].captain_slot or self.grid[j][i].captain_slot_2:
                         s += colored('C', 'magenta')
                     elif self.grid[j][i].alien_id != -1:
                         s += colored('A', 'red')
