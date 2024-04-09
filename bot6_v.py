@@ -61,7 +61,7 @@ class Grid2:
 
         return d1, d2
 
-class bot3:
+class bot6:
     def __init__(self, grid, alpha = 0.1, k=5, debug=1):
         self.grid = grid
         self.pos = None
@@ -121,37 +121,6 @@ class bot3:
                     found_alien = 1
                     break
         return found_alien == 1
-    
-    # def diffuse_alien_prob(self, choose_fun):
-        # open_cells = self.grid._grid.get_open_indices()
-        # filtered_open_cells = [oc for oc in open_cells if choose_fun(oc)]
-        # alien_belief = np.zeros((self.grid.D, self.grid.D))
-        # for ci in filtered_open_cells:
-            # neighbors = self.grid._grid.get_neighbors(ci)
-            # neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open and choose_fun(n)]
-            # for n in neighbors:
-                # alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
-        # total_belief = np.sum(alien_belief)
-        # for ci in open_cells:
-            # alien_belief[ci[1]][ci[0]] /= total_belief
-        # for ci in open_cells:
-            # self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
-
-    # def restrict_alien_prob(self, choose_fun):
-        # open_cells = self.grid._grid.get_open_indices()
-        # for i in open_cells:
-            # if not choose_fun(i):
-                # print("Seems to work")
-        # filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
-        # print(f"Cells to set to 0: {len(filtered_open_cells)}")
-        # for ci in filtered_open_cells:
-            # print("Setting to 0")
-            # self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
-        # total_belief = 0
-        # for ci in open_cells:
-            # total_belief += self.grid.grid[ci[1]][ci[0]].alien_belief
-        # for ci in open_cells:
-            # self.grid.grid[ci[1]][ci[0]].alien_belief /= total_belief
 
     def find_upper_and_lower(self, grid_x, grid_y):
         upper_y = min(self.D, self.pos[1] + self.k)
@@ -174,7 +143,8 @@ class bot3:
         open_cells = self.grid._grid.get_open_indices()
         # Cells inside the alien sensor and just outside
         # The probability will diffuse among these
-        filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
+        # filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
+        filtered_open_cells = open_cells
         alien_belief = np.zeros((self.grid.D, self.grid.D))
 
         if alien_found:
