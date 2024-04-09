@@ -286,7 +286,7 @@ class bot2:
         self.DECISION_CLOSE_IN = 1
         self.coarse_grid_size = 7
         self.coarse_grid = [[0 for _ in range(self.coarse_grid_size)] for __ in range(self.coarse_grid_size)]
-        self.decision_state = None
+        self.decision_state = self.DECISION_CLOSE_IN
         self.dest_cell = None
         self.visited_cg = set()
 
@@ -483,6 +483,20 @@ class bot2:
             #print(f"Size: {self.grid.distance(min_pos, max_pos)}")
             return self.grid.distance(min_pos, max_pos)
 
+    def get_coarse_pos(self, pos):
+        stride = self.grid.D//self.coarse_grid_size
+        return (pos[0] // stride, pos[1] // stride)
+
+    def update_coarse_grid(self):
+        open_cells = self.grid._grid.get_open_indices()
+        tot_belief = 0
+        for oc in open_cells:
+            cpos = self.get_coarse_pos(oc)
+            self.coarse_grid[cpos[1]][cpos[0]] += self.grid.grid[oc[1]][oc[0]].crew_belief
+            tot_belief += self.grid.grid[oc[1]][oc[0]].crew_belief
+        if abs( tot_belief - 1.0 ) > 1e-6:
+            print(f"Total Belief is not 1!!: {tot_belief}")
+
     def make_decision(self):
         #print("New Decision!")
         # We make these decisions based on how concentrated the beliefs are
@@ -531,25 +545,36 @@ class bot2:
         
     def move(self):
         self.update_belief(self.crew_sensor(), self.alien_sensor())
-        bb_size = self.measure_belief_bb_size()
-        print(f"Bounding Box size: {bb_size}")
-        if bb_size <= BB_SIZE:
-            if self.decision_state == self.DECISION_EXPLORE:
-                print(f"Turns till convergence: {self.tick}")
-            self.decision_state = self.DECISION_CLOSE_IN
-        if self.pos == self.dest_cell and self.decision_state == self.DECISION_EXPLORE:
-            self.decision_state, self.dest_cell = self.make_decision()
-        if self.decision_state == None:
-            self.decision_state, self.dest_cell = self.make_decision()
+        self.update_coarse_grid()
+        #bb_size = self.measure_belief_bb_size()
+        #print(f"Bounding Box size: {bb_size}")
+        #if bb_size <= BB_SIZE:
+        #    if self.decision_state == self.DECISION_EXPLORE:
+        #        print(f"Turns till convergence: {self.tick}")
+        #    self.decision_state = self.DECISION_CLOSE_IN
+        #if self.pos == self.dest_cell and self.decision_state == self.DECISION_EXPLORE:
+        #    self.decision_state, self.dest_cell = self.make_decision()
+        #if self.decision_state == None:
+        #    self.decision_state, self.dest_cell = self.make_decision()
         if self.decision_state == self.DECISION_CLOSE_IN:
             #print("Closing In!!")
             neighbors = self.grid._grid.get_open_neighbors(self.pos)
             neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
             neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
             open_cells = self.grid._grid.get_unoccupied_open_indices()
-
+            sorted_ocs = sorted(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
             self.grid._grid.remove_bot(self.pos)
-            dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+            dest_cell_coarse = max([(i,j) for i in range(self.coarse_grid_size) for j in range(self.coarse_grid_size)], key=lambda x: self.coarse_grid[x[1]][x[0]])
+            stride = self.grid.D//self.coarse_grid_size
+            dest_cell = max([(i, j)
+                            for i in range(dest_cell_coarse[0]*stride, ( dest_cell_coarse[0] + 1 )*stride)
+                            for j in range(dest_cell_coarse[1]*stride, ( dest_cell_coarse[1] + 1 )*stride)
+                            if self.grid.grid[j][i].open],
+                            key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+            print(f"Coarse Destination: {dest_cell_coarse}")
+            print(f"Fine Destination: {dest_cell}")
+            print(f"Crew Member Position: {self.grid.crew_pos}")
+            print(f"Top Prob Cells: {sorted_ocs[-1:-5:-1]}")
             self.plan_path(dest_cell)
             if len(self.path) != 0:
                 self.pos = self.path[0]
@@ -665,7 +690,7 @@ class WorldState:
                         print("Alien belief 0 at alien position!!!!")
                     if a.ind == b.pos:
                         print("FAILURE: Alien Capture!")
-                        self.captures[0] += 1
+                        self.captures[1] += 1
                         break
                     #plot_world_state(g, b)
                     #plt.show()
@@ -696,7 +721,7 @@ class WorldState:
             self.ret_captures[1].append(self.captures[1])
             self.ret_fails[1].append(self.fails[1])
             self.ret_turns[1].append(self.turns[1])
-        return (self.data, self.alpha_list)
+        return (self.data, self.alpha_list, self.ret_captures, self.ret_fails, self.ret_turns)
 
 
 def dispatch_jobs(jobs=6):
@@ -889,13 +914,17 @@ PLOT = False
 #        os.remove(f"tmp{_}.png")
 plt.style.use("ggplot")
 w = WorldState()
-data, alpha_list = w.simulate()
+data, alpha_list, captures, fails, _ = w.simulate()
 plt.xlabel("Alpha")
 plt.ylabel("Avg Turns to Capture")
 plt.plot(alpha_list, data[0], label="Bot1")
 plt.plot(alpha_list, data[1], label="Bot2")
 plt.legend()
 plt.show()
+print(f"Bot 1 Captures: {captures[0]}")
+print(f"Bot 1 Fails: {fails[0]}")
+print(f"Bot 2 Captures: {captures[1]}")
+print(f"Bot 2 Fails: {fails[1]}")
 #print("Bot 1 Output:")
 #print(f"Run output: {w.runs[0]}\nAlienCaptures: {w.captures[0]}\nFails: {w.fails[0]}")
 #print(f"Average steps: {sum(w.runs[0])/len(w.runs[0])}")
