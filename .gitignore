@@ -8,4 +8,5 @@
 
 ai/
 test.py
+transfer.py
 .venv/

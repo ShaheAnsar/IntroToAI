@@ -9,7 +9,9 @@ from collections import deque
 import os
 from math import exp
 import multiprocessing as mp
-from multiprocessing import Pool
+from multiprocessing import Pool, Process, Queue
+
+plt.style.use('ggplot')
 
 D=35
 COMPUTE_LIMIT = 5000
@@ -530,6 +532,10 @@ class bot4:
             # Crew Belief
             for key, _ in self.grid.beliefs.items():
                 one_cell, two_cell = key
+                self.runs = [[], [], []]
+                self.captures = [0, 0, 0]
+                self.fails = [0, 0, 0]
+                self.turns = [0, 0, 0]
                 gen_crew_one, gen_crew_two = 0, 0
 
                 gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos))
@@ -1022,7 +1028,7 @@ class bot5:
         self.tick += 1
 
 class WorldState:
-    def __init__(self, max_runs=10, max_turns=400, alpha_list=[i/100 for i in range(1, 5)] + [i/10 for i in range(1, 5)]):
+    def __init__(self, max_runs=100, max_turns=400, alpha_list=[i/100 for i in range(1, 5)] + [i/10 for i in range(1, 5)]):
         self.MAX_RUNS = max_runs
         self.MAX_TURNS = max_turns
         self.runs = [[], [], []]
@@ -1035,13 +1041,13 @@ class WorldState:
         self.ret_captures = [[],[], []]
         self.alpha_list = alpha_list
 
-    def simulate(self):
+    def simulate(self, q=None):
         for alpha in self.alpha_list:
+            self.runs = [[], [], []]
+            self.captures = [0, 0, 0]
+            self.fails = [0, 0, 0]
+            self.turns = [0, 0, 0]
             for __ in range(self.MAX_RUNS):
-                self.runs = [[], [], []]
-                self.captures = [0, 0, 0]
-                self.fails = [0, 0, 0]
-                self.turns = [0, 0, 0]
                 self.g = Grid2(debug=False, alpha=alpha)
                 b = bot3(self.g, alpha=alpha, debug=False)
                 a = Alien(self.g._grid, b)
@@ -1112,7 +1118,7 @@ class WorldState:
                         #plt.show()
                         gif_coll.append(Image.open(f"tmp{_}.png"))
                     self.turns[1] += 1
-                    if self.g.crew_pos == None and self.g.crew_pos2 == None:
+                    if b.found_all_crew:
                         print("SUCCES: Crew member reached!")
                         self.runs[1].append(_)
                         break
@@ -1168,31 +1174,92 @@ class WorldState:
                         break
                 
             # bot 3 data stuff
-            self.data[0].append(sum(self.runs[0])/len(self.runs[0]) if len(self.runs[0]) > 0 else 0)
+            print(f"Length Check: {len(self.runs[0])}")
+            self.data[0].append(sum(self.runs[0])/len(self.runs[0]) if len(self.runs[0]) > 0 else float('nan'))
             self.ret_captures[0].append(self.captures[0])
             self.ret_fails[0].append(self.fails[0])
             self.ret_turns[0].append(self.turns[0])
             
             
             # bot 4 data stuff
-            self.data[1].append(sum(self.runs[1])/len(self.runs[1]) if len(self.runs[1]) > 0 else 0)
+            self.data[1].append(sum(self.runs[1])/len(self.runs[1]) if len(self.runs[1]) > 0 else float('nan'))
             self.ret_captures[1].append(self.captures[1])
             self.ret_fails[1].append(self.fails[1])
             self.ret_turns[1].append(self.turns[1])
             
             
             # bot 5 data stuff
-            self.data[2].append(sum(self.runs[2])/len(self.runs[2]) if len(self.runs[2]) > 0 else 0)
+            self.data[2].append(sum(self.runs[2])/len(self.runs[2]) if len(self.runs[2]) > 0 else float('nan'))
             self.ret_captures[2].append(self.captures[2])
             self.ret_fails[2].append(self.fails[2])
             self.ret_turns[2].append(self.turns[2])
 
+            if q is not None:
+                print("PUSHING")
+                ret_dict = {}
+                ret_dict["data"] = self.data
+                ret_dict["captures"] = self.ret_captures
+                ret_dict["fails"] = self.ret_fails
+                ret_dict["turns"] = self.ret_turns
+                q.put(ret_dict)
+                print("DONE PUSHING")
+            else:
+                print("Something is wrong!")
+                exit(-1)
+
         return (self.data, self.alpha_list)
 
 
-def dispatch_jobs(jobs=6):
-    pass
 
+def dispatch_jobs(jobs=6, alpha_list=[i/100 for i in range(1, 20, 2)]):
+    if len(alpha_list) % jobs > 0:
+        print("Not properly divisible!")
+        exit(-1)
+    queues = [Queue() for i in range(jobs)]
+    rets = [0 for i in range(jobs)]
+    alpha_lists = [alpha_list[i*(len(alpha_list)//jobs):(i + 1)*(len(alpha_list)//jobs)] for i in range(jobs)]
+    states = [WorldState(alpha_list=alpha_lists[i]) for i in range(jobs)]
+    print(alpha_lists[0])
+    processes = [Process(target=states[i].simulate, args=(), kwargs={"q": queues[i]}) for i in range(jobs)]
+    for p in processes:
+        p.start()
+    for i, q in enumerate(queues):
+        print("Getting data")
+        rets[i] = q.get()
+        print("Got data")
+    for p in processes:
+        p.join()
+    captures = [[], [], []]
+    fails = [[], [], []]
+    avg_turns = [[], [], []]
+    for i, r in enumerate(rets):
+        print(f"Return {i}: {r}")
+        avg_turns[0].extend(r["data"][0])
+        avg_turns[1].extend(r["data"][1])
+        avg_turns[2].extend(r["data"][2])
+        fails[0].extend(r["fails"][0])
+        fails[1].extend(r["fails"][1])
+        fails[2].extend(r["fails"][2])
+        captures[0].extend(r["captures"][0])
+        captures[1].extend(r["captures"][1])
+        captures[2].extend(r["captures"][2])
+    print(f"Bot 1 Avg Runs: {list(zip(avg_turns[0], alpha_list))}")
+    print(f"Bot 1 Captures: {captures[0]}")
+    print(f"Bot 1 Fails: {fails[0]}")
+    print(f"Bot 2 Avg Runs: {list(zip(avg_turns[1], alpha_list))}")
+    print(f"Bot 2 Captures: {captures[1]}")
+    print(f"Bot 2 Fails: {fails[1]}")
+    print(f"Bot 3 Avg Runs: {list(zip(avg_turns[2], alpha_list))}")
+    print(f"Bot 3 Captures: {captures[2]}")
+    print(f"Bot 3 Fails: {fails[2]}")
+    plt.plot(alpha_list, avg_turns[0], label="Bot 1")
+    plt.plot(alpha_list, avg_turns[1], label="Bot 2")
+    plt.plot(alpha_list, avg_turns[2], label="Bot 3")
+    plt.title("Average Turns Till Rescue")
+    plt.xlabel("Alpha")
+    plt.ylabel("Average Turns")
+    plt.legend()
+    plt.show()
 
 gif_coll = []
 def plot_world_state(grid, bot):
@@ -1260,6 +1327,8 @@ def plot_world_state(grid, bot):
 MAX_TURNS = 1000
 MAX_RUNS = 100
 PLOT = False
+
+dispatch_jobs(jobs=10)
 
 #def simulate(gr, bo, al):
 #    turns = 0
@@ -1378,21 +1447,21 @@ PLOT = False
 #    os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
 #    for _ in range(turns[0]):
 #        os.remove(f"tmp{_}.png")
-plt.style.use("ggplot")
-w = WorldState()
-data, alpha_list = w.simulate()
-plt.xlabel("Alpha")
-plt.ylabel("Avg Turns to Capture")
-plt.plot(alpha_list, data[0], label="Bot3")
-plt.plot(alpha_list, data[1], label="Bot4")
-plt.plot(alpha_list, data[2], label="Bot5")
-
-print(f"data[0]: {data[0]}")
-print(f"data[1]: {data[1]}")
-print(f"data[2]: {data[2]}")
-
-plt.legend()
-plt.savefig(f"bot345_bb70.png", dpi=200)
+#plt.style.use("ggplot")
+#w = WorldState()
+#data, alpha_list = w.simulate()
+#plt.xlabel("Alpha")
+#plt.ylabel("Avg Turns to Capture")
+#plt.plot(alpha_list, data[0], label="Bot3")
+#plt.plot(alpha_list, data[1], label="Bot4")
+#plt.plot(alpha_list, data[2], label="Bot5")
+#
+#print(f"data[0]: {data[0]}")
+#print(f"data[1]: {data[1]}")
+#print(f"data[2]: {data[2]}")
+#
+#plt.legend()
+#plt.savefig(f"bot345_bb70.png", dpi=200)
 #print("Bot 1 Output:")
 #print(f"Run output: {w.runs[0]}\nAlienCaptures: {w.captures[0]}\nFails: {w.fails[0]}")
 #print(f"Average steps: {sum(w.runs[0])/len(w.runs[0])}")
