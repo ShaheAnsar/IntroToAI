@@ -835,17 +835,26 @@ class bot5:
         elif crew_member == 2:
             self.found_crew = self.grid.crew_pos2
             
-        # now we have to remove all the dict keys that don't have this crew coordinate
+        # Now we know one of the coordinates. We use that coordinate as one part of the pair
+        # and find all the keys which include it. We then use the other coordinate and use
+        # it to set the remaining crew member's belief
         new_dict = {}
         open_cells = self.grid._grid.get_open_indices()
         for oc in open_cells:
-            max_belief = 0
-            for k in self.grid.beliefs:
-                if oc in k and self.grid.beliefs[k] > max_belief:
-                    max_belief = self.grid.beliefs[k]
-            new_dict[oc] = max_belief
-            self.grid.grid[oc[1]][oc[0]].crew_belief = 1.0 #max_belief
-
+            self.grid.grid[oc[1]][oc[0]].crew_belief = 0.0 #max_belief
+        for k, v in self.grid.beliefs.items():
+            if self.found_crew in k:
+                other_pos = None
+                if k[0] == self.found_crew:
+                    other_pos = k[1]
+                elif k[1] == self.found_crew:
+                    other_pos = k[0]
+                else:
+                    print("Shouldn't happen!")
+                    exit(-1)
+                self.grid.grid[other_pos[1]][other_pos[0]].crew_belief = v
+        
+        # Normalize
         total_belief = sum([self.grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells])
         for oc in open_cells:
             self.grid.grid[oc[1]][oc[0]].crew_belief /= total_belief
@@ -1296,7 +1305,7 @@ class WorldState:
                         #plt.show()
                         gif_coll.append(Image.open(f"tmp{_}.png"))
                     self.turns[2] += 1
-                    if self.g.crew_pos == None and self.g.crew_pos2 == None:
+                    if b.found_all_crew:
                         print("SUCCES: Crew member reached!")
                         self.runs[2].append(_)
                         break
@@ -1463,7 +1472,9 @@ MAX_TURNS = 600
 MAX_RUNS = 10
 PLOT = False
 
-#dispatch_jobs(jobs=10)
+
+if __name__ == "__main__":
+    dispatch_jobs(jobs=10)
 
 #def simulate(gr, bo, al):
 #    turns = 0
@@ -1504,44 +1515,44 @@ PLOT = False
 #            break
 
 
-runs = [[], []]
-captures = [0, 0]
-fails = [0, 0]
-turns = [0, 0]
-for __ in range(MAX_RUNS):
-    g = Grid2(debug=False)
-    b = bot5(g, alpha=0.1, debug=True)
-    a = Alien(g._grid, b)
-    alien_pos = a.ind
-    bot_pos = b.pos
-    #succ, run = simulate(g, b, a)
-    for _ in range(MAX_TURNS):
-        print(f"Turn {_}")
-        b.move()
-        if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
-            print("Alien belief 0 at alien position!!!!")
-        if a.ind == b.pos:
-            print("FAILURE: Alien Capture!")
-            captures[0] += 1
-            break
-        #plot_world_state(g, b)
-        #plt.show()
-        a.move()
-        turns[0] += 1
-        if b.found_all_crew:
-            print("Success!")
-            runs[0].append(_)
-            break
-        if a.ind == b.pos:
-            print("FAILURE: Alien Capture!")
-            captures[0] += 1
-            break
-        if _ == MAX_TURNS - 1:
-            fails[0] += 1
-            break
-print(f"Bot 5 Runs: {runs[0]}")
-print(f"Bot 5 Fails: {fails[0]}")
-print(f"Bot 5 Captures: {fails[1]}")
+#runs = [[], []]
+#captures = [0, 0]
+#fails = [0, 0]
+#turns = [0, 0]
+#for __ in range(MAX_RUNS):
+#    g = Grid2(debug=False)
+#    b = bot5(g, alpha=0.1, debug=True)
+#    a = Alien(g._grid, b)
+#    alien_pos = a.ind
+#    bot_pos = b.pos
+#    #succ, run = simulate(g, b, a)
+#    for _ in range(MAX_TURNS):
+#        print(f"Turn {_}")
+#        b.move()
+#        if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
+#            print("Alien belief 0 at alien position!!!!")
+#        if a.ind == b.pos:
+#            print("FAILURE: Alien Capture!")
+#            captures[0] += 1
+#            break
+#        #plot_world_state(g, b)
+#        #plt.show()
+#        a.move()
+#        turns[0] += 1
+#        if b.found_all_crew:
+#            print("Success!")
+#            runs[0].append(_)
+#            break
+#        if a.ind == b.pos:
+#            print("FAILURE: Alien Capture!")
+#            captures[0] += 1
+#            break
+#        if _ == MAX_TURNS - 1:
+#            fails[0] += 1
+#            break
+#print(f"Bot 5 Runs: {runs[0]}")
+#print(f"Bot 5 Fails: {fails[0]}")
+#print(f"Bot 5 Captures: {fails[1]}")
 #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
 #if PLOT:
 #    print("Saving gif...")
