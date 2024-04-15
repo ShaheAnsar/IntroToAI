@@ -15,7 +15,8 @@ plt.style.use('ggplot')
 
 D=35
 COMPUTE_LIMIT = 5000
-BB_SIZE=70
+BB_SIZE=40
+BB_SIZE_4D = 50
 ALPHA=0.1
 
 def grid_sum(D, num_g):
@@ -73,12 +74,12 @@ class Grid2:
         self.beliefs = {}
         open_cells = self._grid.get_unoccupied_open_indices()
 
-        sum = len(open_cells) * (len(open_cells) - 1) / 2
+        s = len(open_cells) * (len(open_cells) - 1) / 2
         for one_cell in open_cells:
             for two_cell in open_cells:
                 if (two_cell, one_cell) in self.beliefs or one_cell == two_cell:
                     continue
-                self.beliefs[(one_cell, two_cell)] = 1 / sum
+                self.beliefs[(one_cell, two_cell)] = 1 / s
 
         # got from bot4.py grid2 init function
         X = range(self.D)
@@ -117,6 +118,13 @@ class Grid2:
     
     def reset_grid(self):
         self._grid.reset_grid()
+        open_cells = self._grid.get_open_indices()
+        s = len(open_cells) * (len(open_cells) - 1) / 2
+        for one_cell in open_cells:
+            for two_cell in open_cells:
+                if (two_cell, one_cell) in self.beliefs or one_cell == two_cell:
+                    continue
+                self.beliefs[(one_cell, two_cell)] = 1 / s
 
 class bot3:
     def __init__(self, grid, alpha = ALPHA, k=5, debug=1, p=None):
@@ -489,22 +497,11 @@ class bot4:
                     max_belief = self.grid.beliefs[k]
             new_dict[oc] = max_belief
             self.grid.grid[oc[1]][oc[0]].crew_belief = 1.0 #max_belief
-        #total_belief = np.sum([v for _, v in new_dict.items()])
-        #for i, k in new_dict:
-        #    new_dict[k] = i/total_belief
+
         total_belief = sum([self.grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells])
         for oc in open_cells:
             self.grid.grid[oc[1]][oc[0]].crew_belief /= total_belief
 
-        #remove_keys_list = self.grid.beliefs.keys()
-        #remove_keys_list = [key for key in remove_keys_list if self.found_crew not in key]
-        #for key in remove_keys_list:
-        #    del self.grid.beliefs[key]
-
-        ## now that we've removed the keys without the crew member, we need to normalize the probabilities remaining
-        #sum_beliefs = sum(self.grid.beliefs.values())
-        #for key, _ in self.grid.beliefs.items():
-        #    self.grid.beliefs[key] *= 1 / sum_beliefs
 
     def update_belief(self, beep, alien_found):
         generative_fn = lambda x: exp(-self.alpha * (x - 1))# if beep else (1 - (np.exp(-self.alpha * (x - 1))))
@@ -647,7 +644,6 @@ class bot4:
                 print(f"No. of pairs: {len(self.grid.beliefs)}")
                 print(f"Top 3 position pairs: {sorted_positions[-1]} : {self.grid.beliefs[sorted_positions[-1]]}, {sorted_positions[-2]} : {self.grid.beliefs[sorted_positions[-2]]}, {sorted_positions[-3]} : {self.grid.beliefs[sorted_positions[-3]]}")
                 print(f"Dest Cell: {dest_cell}, actual crew: {self.grid.crew_pos}, {self.grid.crew_pos2}")
-                self.test()
         self.plan_path(dest_cell)
         if len(self.path) != 0:
             self.pos = self.path[0]
@@ -712,6 +708,11 @@ class bot5:
         self.decision_state = None
         self.dest_cell = None
         self.visited_cg = set()
+        self.found_crew = None
+        self.found1 = False
+        self.found2 = False
+        self.found_all_crew = False
+        self.switch_to_single = False
 
 
     def within_alien_sensor(self, pos):
@@ -729,6 +730,13 @@ class bot5:
                 if self.grid.grid[j][i].open and self.grid.grid[j][i].alien_belief > 0.1/self.grid.D:                    
                     return True
         return False
+
+    def distance_4d(self, p1, p2):
+        p1_1, p1_2 = p1
+        p2_1, p2_2 = p2
+        d1 = self.grid.distance(p1_1, p2_1) + self.grid.distance(p1_2, p2_2)
+        d2 = self.grid.distance(p1_1, p2_2) + self.grid.distance(p1_2, p2_1)
+        return min(d1, d2)
 
     def crew_sensor(self):
         c1 = rd.random()
@@ -814,30 +822,109 @@ class bot5:
 
 
 
-    def update_belief(self, beep, alien_found):
-        # Crew Belief
-        generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
+    def update_helper(self, crew_member):
+        '''
+            this resets the probability after one of the crew members has been found
+        '''
+        # Use this switch to revert back to one crew behavior.
+        # Could be done more elegantly with a list, lack of time forced this hacky solution
+        self.switch_to_single = True
+        crew = None
+        if crew_member == 1:
+            self.found_crew = self.grid.crew_pos
+        elif crew_member == 2:
+            self.found_crew = self.grid.crew_pos2
+            
+        # now we have to remove all the dict keys that don't have this crew coordinate
+        new_dict = {}
         open_cells = self.grid._grid.get_open_indices()
-        for ci in open_cells:
-            if ci == self.pos:
-                continue
-            gen_res = generative_fn(self.grid.distance(ci, self.pos))
-            self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
-        # Normalize
-        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
-        belief_sum = sum(flat_beliefs)
-        for ci in open_cells:
-            self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+        for oc in open_cells:
+            max_belief = 0
+            for k in self.grid.beliefs:
+                if oc in k and self.grid.beliefs[k] > max_belief:
+                    max_belief = self.grid.beliefs[k]
+            new_dict[oc] = max_belief
+            self.grid.grid[oc[1]][oc[0]].crew_belief = 1.0 #max_belief
+
+        total_belief = sum([self.grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells])
+        for oc in open_cells:
+            self.grid.grid[oc[1]][oc[0]].crew_belief /= total_belief
+
+
+    def update_belief(self, beep, alien_found):
+        generative_fn = lambda x: exp(-self.alpha * (x - 1))# if beep else (1 - (np.exp(-self.alpha * (x - 1))))
+        if self.switch_to_single:
+            open_cells = self.grid._grid.get_open_indices()
+            for ci in open_cells:
+                if ci == self.pos:
+                    continue
+                dist = self.grid.distance(ci, self.pos)
+                gen_res = generative_fn(dist)
+                if not beep:
+                    gen_res = 1.0 - gen_res
+                if gen_res == 0:
+                    pass
+                    #print("DANGER!!!")
+                    #print(f"Distance: {self.grid.distance(ci, self.pos)}, Beep: {beep}")
+                self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
+            # Normalize
+            flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+            belief_sum = sum(flat_beliefs)
+            for ci in open_cells:
+                self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+
+        else:
+            # Crew Belief
+            for key, _ in self.grid.beliefs.items():
+                one_cell, two_cell = key
+                gen_crew_one, gen_crew_two = 0, 0
+
+                gen_crew_one = generative_fn(self.grid.distance(one_cell, self.pos))
+                gen_crew_two = generative_fn(self.grid.distance(two_cell, self.pos))
+                if beep:
+                    total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+                else:
+                    total_prob = gen_crew_one + gen_crew_two - gen_crew_one * gen_crew_two
+                    total_prob = 1 - total_prob
+                self.grid.beliefs[(one_cell, two_cell)] *= total_prob
+
+
+            # Normalize
+            sum_beliefs = sum(self.grid.beliefs.values())
+            for key, value in self.grid.beliefs.items():
+                self.grid.beliefs[key] = value / sum_beliefs
 
         # Alien Belief
-        # The alien belief consists of two steps-
-        # If there is no detection, we diffuse everything outside of the detection square
-        # If there is a detection, we set everything outside the square to 0 and leave
-        # everything inside the square as is
-        alien_belief = np.zeros(( self.grid.D, self.grid.D ))
+
+        alien_belief = zeros(self.grid.D, self.grid.D)
         self.diffuse_alien_prob(alien_found)
         self.restrict_alien_prob(alien_found)
         #print("Alien detected" if alien_found else "Alien Not Detected")
+
+    #def update_belief(self, beep, alien_found):
+    #    # Crew Belief
+    #    generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
+    #    open_cells = self.grid._grid.get_open_indices()
+    #    for ci in open_cells:
+    #        if ci == self.pos:
+    #            continue
+    #        gen_res = generative_fn(self.grid.distance(ci, self.pos))
+    #        self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
+    #    # Normalize
+    #    flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+    #    belief_sum = sum(flat_beliefs)
+    #    for ci in open_cells:
+    #        self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+
+    #    # Alien Belief
+    #    # The alien belief consists of two steps-
+    #    # If there is no detection, we diffuse everything outside of the detection square
+    #    # If there is a detection, we set everything outside the square to 0 and leave
+    #    # everything inside the square as is
+    #    alien_belief = np.zeros(( self.grid.D, self.grid.D ))
+    #    self.diffuse_alien_prob(alien_found)
+    #    self.restrict_alien_prob(alien_found)
+    #    #print("Alien detected" if alien_found else "Alien Not Detected")
 
     def plan_path(self, dest):
         if self.debug:
@@ -889,31 +976,16 @@ class bot5:
             print("Planned Path")
 
     def measure_belief_bb_size(self):
-            crew_prob = [[self.grid.grid[j][i].crew_belief if self.grid.grid[j][i].open else 0 for i in range(self.grid.D)] for j in range(self.grid.D)]
-            thresh = max([self.grid.grid[j][i].crew_belief for j in range(self.grid.D) for i in range(self.grid.D) if self.grid.grid[j][i].open]) * 0.2
-            crew_prob_bin = [[1 if crew_prob[j][i] >= thresh else 0 for i in range(self.grid.D)] for j in range(self.grid.D)]
-            #plt.subplot(121)
-            #plt.imshow(crew_prob)
-            #plt.subplot(122)
-            #plt.imshow(crew_prob_bin)
-            #plt.show()
-
-            # Calculate bounding box
-            min_pos = [self.grid.D, self.grid.D]
-            max_pos = [0, 0]
-            for j in range(self.grid.D):
-                for i in range(self.grid.D):
-                    if self.grid.grid[j][i].open and crew_prob_bin[j][i] == 1:
-                        if i >= max_pos[0] and j >= max_pos[1]:
-                            max_pos[0] = i
-                            max_pos[1] = j
-                        if i <= min_pos[0] and j <= min_pos[1]:
-                            min_pos[0] = i
-                            min_pos[1] = j
-            #print(f"Max pos: {max_pos}")
-            #print(f"Min pos: {min_pos}")
-            #print(f"Size: {self.grid.distance(min_pos, max_pos)}")
-            return self.grid.distance(min_pos, max_pos)
+        highest_prob_pair = max(self.grid.beliefs.keys(), key=lambda x: self.grid.beliefs[x])
+        highest_prob = self.grid.beliefs[highest_prob_pair]
+        thresh = 0.3
+        binarized_pairs = [k for k in self.grid.beliefs.keys() if self.grid.beliefs[k] > highest_prob*thresh]
+        max_dist = 0
+        for pair in binarized_pairs:
+            dist = self.distance_4d(highest_prob_pair, pair)
+            if dist > max_dist:
+                max_dist = dist
+        return max_dist
 
     def make_decision(self):
         #print("New Decision!")
@@ -927,7 +999,7 @@ class bot5:
             self.decision_state = self.DECISION_EXPLORE
             #print("Exploration")
             bb_size = self.measure_belief_bb_size()
-            if bb_size <= BB_SIZE:
+            if bb_size <= BB_SIZE_4D:
                 return self.DECISION_CLOSE_IN, None
             # We first subdivide the grid into a coarser grid and then we are going choose a random point in each of these
             # coarser cells. We travel there and keep on going further till the beliefs condense. For the time being we are setting
@@ -965,7 +1037,7 @@ class bot5:
         self.update_belief(self.crew_sensor(), self.alien_sensor())
         bb_size = self.measure_belief_bb_size()
         print(f"Bounding Box size: {bb_size}")
-        if bb_size <= BB_SIZE:
+        if bb_size <= BB_SIZE_4D:
             if self.decision_state == self.DECISION_EXPLORE:
                 print(f"Turns till convergence: {self.tick}")
             self.decision_state = self.DECISION_CLOSE_IN
@@ -975,31 +1047,94 @@ class bot5:
             self.decision_state, self.dest_cell = self.make_decision()
         if self.decision_state == self.DECISION_CLOSE_IN:
             #print("Closing In!!")
+            #neighbors = self.grid._grid.get_open_neighbors(self.pos)
+            #neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
+            #neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+            #open_cells = self.grid._grid.get_unoccupied_open_indices()
+
+            #self.grid._grid.remove_bot(self.pos)
+            #dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+            #self.plan_path(dest_cell)
+            #if len(self.path) != 0:
+            #    self.pos = self.path[0]
+            ## If no path is found, we automatically shift to evasion, and the evasion strategy is basic
+            ## Go to the cell with the lowest alien probability
+            #else:
+            #    if self.debug:
+            #        print("Evasion!!")
+            #    neighbors = self.grid._grid.get_neighbors(self.pos)
+            #    open_neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open]
+            #    open_neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].alien_belief)
+            #    self.pos = open_neighbors[0]
+            ##elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+            ##    self.pos = rd.choice(neighbors)
+            ##else:
+            ##    self.pos = neighbors[-1]
+            #
+            #self.grid._grid.place_bot(self.pos)
+
             neighbors = self.grid._grid.get_open_neighbors(self.pos)
-            neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
             neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
             open_cells = self.grid._grid.get_unoccupied_open_indices()
 
             self.grid._grid.remove_bot(self.pos)
-            dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+
+            if self.switch_to_single:
+                dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+                print(f"Dest Cell: {dest_cell}, Actual Crew: {self.grid.crew_pos}, Current Pos: {self.pos}, Distance to Crew: {self.grid.distance_to_crew(self.pos)}")
+            else:
+                max_belief = max(self.grid.beliefs.values())
+                sorted_positions = [key for key in self.grid.beliefs.keys()]
+                sorted_positions.sort(key=lambda x: self.grid.beliefs[x])
+                position = sorted_positions[-1]
+                dest_cell = min(position[0], position[1], 
+                                key=lambda x: abs(x[0] - self.pos[0]) + abs(x[1] - self.pos[1])
+                            ) if self.found_crew is None else (position[0] if self.found_crew == position[1] else position[1])
+                if self.debug:
+                    print(f"No. of pairs: {len(self.grid.beliefs)}")
+                    print(f"Top 3 position pairs: {sorted_positions[-1]} : {self.grid.beliefs[sorted_positions[-1]]}, {sorted_positions[-2]} : {self.grid.beliefs[sorted_positions[-2]]}, {sorted_positions[-3]} : {self.grid.beliefs[sorted_positions[-3]]}")
+                    print(f"Dest Cell: {dest_cell}, actual crew: {self.grid.crew_pos}, {self.grid.crew_pos2}")
             self.plan_path(dest_cell)
             if len(self.path) != 0:
                 self.pos = self.path[0]
-            # If no path is found, we automatically shift to evasion, and the evasion strategy is basic
-            # Go to the cell with the lowest alien probability
+            # elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+                # self.pos = rd.choice(neighbors)
             else:
-                if self.debug:
-                    print("Evasion!!")
-                neighbors = self.grid._grid.get_neighbors(self.pos)
-                open_neighbors = [n for n in neighbors if self.grid.grid[n[1]][n[0]].open]
-                open_neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].alien_belief)
-                self.pos = open_neighbors[0]
-            #elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
-            #    self.pos = rd.choice(neighbors)
-            #else:
-            #    self.pos = neighbors[-1]
-            
+                self.pos = neighbors[-1]
             self.grid._grid.place_bot(self.pos)
+
+            # if self.pos != self.grid.crew_pos:
+                # self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+
+            if not self.grid._grid.has_alien(self.pos):
+                self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
+
+            if not self.switch_to_single:
+                if (self.pos != self.found_crew) and \
+                    (self.pos != self.grid.crew_pos) and (self.pos != self.grid.crew_pos2):
+                    self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+                    keys_to_delete = []
+                    for key, _ in self.grid.beliefs.items():
+                        if self.pos in key:
+                            self.grid.beliefs[key] = 0
+                            keys_to_delete.append(key)
+                    for k in keys_to_delete:
+                        del self.grid.beliefs[k]
+                
+                if self.pos == self.grid.crew_pos:
+                    self.found1 = True
+                    self.update_helper(1)
+                    self.grid.crew_pos = self.grid.crew_pos2
+                    self.grid.crew_pos2 = None
+                elif self.pos == self.grid.crew_pos2:
+                    self.found2 = True
+                    self.update_helper(2)
+                    self.grid.crew_pos2 = None
+            else:
+                if self.pos != self.grid.crew_pos:
+                    self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+                else:
+                    self.found_all_crew = True
         else:
             self.grid._grid.remove_bot(self.pos)
             self.plan_path(self.dest_cell)
@@ -1016,15 +1151,15 @@ class bot5:
                 self.pos = open_neighbors[0]
             self.grid._grid.place_bot(self.pos)
         
-        if self.pos != self.grid.crew_pos and self.pos != self.grid.crew_pos2:
-            self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
-        elif self.pos == self.grid.crew_pos:
-            self.grid.crew_pos = None
-        elif self.pos == self.grid.crew_pos2:
-            self.grid.crew_pos2 = None
+        #if self.pos != self.grid.crew_pos and self.pos != self.grid.crew_pos2:
+        #    self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
+        #elif self.pos == self.grid.crew_pos:
+        #    self.grid.crew_pos = None
+        #elif self.pos == self.grid.crew_pos2:
+        #    self.grid.crew_pos2 = None
 
-        if not self.grid._grid.has_alien(self.pos):
-            self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
+        #if not self.grid._grid.has_alien(self.pos):
+        #    self.grid.grid[self.pos[1]][self.pos[0]].alien_belief = 0.0
         self.tick += 1
 
 class WorldState:
@@ -1324,11 +1459,11 @@ def plot_world_state(grid, bot):
     plt.imshow(grid_img3)
     #plt.show()
 
-MAX_TURNS = 1000
-MAX_RUNS = 100
+MAX_TURNS = 600
+MAX_RUNS = 10
 PLOT = False
 
-dispatch_jobs(jobs=10)
+#dispatch_jobs(jobs=10)
 
 #def simulate(gr, bo, al):
 #    turns = 0
@@ -1369,78 +1504,44 @@ dispatch_jobs(jobs=10)
 #            break
 
 
-#runs = [[], []]
-#captures = [0, 0]
-#fails = [0, 0]
-#turns = [0, 0]
-#for __ in range(MAX_RUNS):
-#    g = Grid2(debug=False)
-#    b = bot1(g, debug=False)
-#    a = Alien(g._grid, b)
-#    alien_pos = a.ind
-#    bot_pos = b.pos
-#    #succ, run = simulate(g, b, a)
-#    for _ in range(MAX_TURNS):
-#        print(f"Turn {_}")
-#        b.move()
-#        if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
-#            print("Alien belief 0 at alien position!!!!")
-#        #plot_world_state(g, b)
-#        #plt.show()
-#        a.move()
-#        if PLOT:
-#            plot_world_state(g, b)
-#            plt.savefig(f"tmp{_}.png", dpi=200)
-#            plt.close()
-#            #plt.show()
-#            gif_coll.append(Image.open(f"tmp{_}.png"))
-#        turns[0] += 1
-#        if g.crew_pos == b.pos:
-#            print("SUCCES: Crew member reached!")
-#            runs[0].append(_)
-#            break
-#        if a.ind == b.pos:
-#            print("FAILURE: Alien Capture!")
-#            captures[0] += 1
-#            break
-#        if _ == MAX_TURNS - 1:
-#            fails[0] += 1
-#            break
-#    del b
-#    del a
-#    print(f"Alien Pos: {alien_pos}")
-#    print(f"Bot Pos: {bot_pos}")
-#    #del g
-#    g.reset_grid()
-#    #g = Grid2(debug=False)
-#    b = bot2(g, debug=False, p=bot_pos)
-#    a = Alien(g._grid, b, p=alien_pos)
-#    for _ in range(MAX_TURNS):
-#        print(f"Turn {_}")
-#        b.move()
-#        if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
-#            print("Alien belief 0 at alien position!!!!")
-#        #plot_world_state(g, b)
-#        #plt.show()
-#        a.move()
-#        if PLOT:
-#            plot_world_state(g, b)
-#            plt.savefig(f"tmp{_}.png", dpi=200)
-#            plt.close()
-#            #plt.show()
-#            gif_coll.append(Image.open(f"tmp{_}.png"))
-#        turns[1] += 1
-#        if g.crew_pos == b.pos:
-#            print("SUCCES: Crew member reached!")
-#            runs[1].append(_)
-#            break
-#        if a.ind == b.pos:
-#            print("FAILURE: Alien Capture!")
-#            captures[1] += 1
-#            break
-#        if _ == MAX_TURNS - 1:
-#            fails[1] += 1
-#            break
+runs = [[], []]
+captures = [0, 0]
+fails = [0, 0]
+turns = [0, 0]
+for __ in range(MAX_RUNS):
+    g = Grid2(debug=False)
+    b = bot5(g, alpha=0.1, debug=True)
+    a = Alien(g._grid, b)
+    alien_pos = a.ind
+    bot_pos = b.pos
+    #succ, run = simulate(g, b, a)
+    for _ in range(MAX_TURNS):
+        print(f"Turn {_}")
+        b.move()
+        if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
+            print("Alien belief 0 at alien position!!!!")
+        if a.ind == b.pos:
+            print("FAILURE: Alien Capture!")
+            captures[0] += 1
+            break
+        #plot_world_state(g, b)
+        #plt.show()
+        a.move()
+        turns[0] += 1
+        if b.found_all_crew:
+            print("Success!")
+            runs[0].append(_)
+            break
+        if a.ind == b.pos:
+            print("FAILURE: Alien Capture!")
+            captures[0] += 1
+            break
+        if _ == MAX_TURNS - 1:
+            fails[0] += 1
+            break
+print(f"Bot 5 Runs: {runs[0]}")
+print(f"Bot 5 Fails: {fails[0]}")
+print(f"Bot 5 Captures: {fails[1]}")
 #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
 #if PLOT:
 #    print("Saving gif...")
