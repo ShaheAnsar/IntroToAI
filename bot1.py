@@ -1,400 +1,116 @@
-import os
 import numpy as np
-from collections import namedtuple
+import matplotlib.pyplot as plt
+from proj1 import GridAttrib, Grid, Alien, PathTreeNode
+from numpy import random as nprd
+import random as rd
+from PIL import Image
 from collections import deque
-from collections import defaultdict
-import copy
-import random
-from time import sleep
-from termcolor import colored
-from matplotlib import pyplot as plt
-import multiprocessing as mp
-from multiprocessing import Pool
-import time
+import os
 
-GridPointAttrib = {}
+D=35
+COMPUTE_LIMIT = 5000
 
-class Grid:
-    def __init__(self, D=30, debug=True):
+class Grid2:
+    def __init__(self, D=35, debug=1):
+        self._grid = Grid(D, debug=debug - 1>0)
         self.D = D
-        self.grid = []
-        self.debug = debug
-        self.gen_grid()
+        self.grid = self._grid.grid
+        self.crew_pos = rd.choice(self._grid.get_open_indices())
+    def distance(self, pos1, pos2):
+        d = abs(pos1[1] - pos2[1])
+        d += abs(pos1[0] - pos2[0])
+        return d
+    def distance_to_crew(self, pos):
+        d = self.distance(self.crew_pos, pos)
+        return d
 
-    def valid_index(self, ind):
-        if ind[0] >= self.D or ind[0] < 0 or ind[1] >= self.D or ind[1] < 0:
-            return False
-        return True
-
-    def get_neighbors(self, ind):
-        neighbors = []
-        left = (ind[0] - 1, ind[1])
-        right = (ind[0] + 1, ind[1])
-        up = (ind[0], ind[1] + 1)
-        down = (ind[0], ind[1] - 1)
-        indices = [left, right, up, down]
-        for index in indices:
-            if self.valid_index(index):
-                neighbors.append(index)
-        return neighbors
-    def get_open_neighbors(self, ind):
-        neighbors = []
-        left = (ind[0] - 1, ind[1])
-        right = (ind[0] + 1, ind[1])
-        up = (ind[0], ind[1] + 1)
-        down = (ind[0], ind[1] - 1)
-        indices = [left, right, up, down]
-        for index in indices:
-            if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True:
-                neighbors.append(index)
-        return neighbors
-
-    def get_untraversed_open_neighbors(self, ind):
-        neighbors = []
-        left = (ind[0] - 1, ind[1])
-        right = (ind[0] + 1, ind[1])
-        up = (ind[0], ind[1] + 1)
-        down = (ind[0], ind[1] - 1)
-        indices = [left, right, up, down]
-        for index in indices:
-            if self.valid_index(index) and self.grid[index[1]][index[0]]['open'] == True and self.grid[index[1]][index[0]]['traversed'] == False:
-                neighbors.append(index)
-        return neighbors
-
-    def gen_grid_iterate(self):
-        cells_to_open = []
-        for j in range(self.D):
-            for i in range(self.D):
-                if self.grid[j][i]['open'] == True:
-                    continue
-                neighbors_ind = self.get_neighbors((i, j))
-                open_neighbors = []
-                for neighbor_ind in neighbors_ind:
-                    if self.grid[neighbor_ind[1]][neighbor_ind[0]]['open'] is True:
-                        open_neighbors.append(neighbor_ind)
-                if len(open_neighbors) == 1:
-                    cells_to_open.append((i, j))
-        if len(cells_to_open) > 0:
-            index = random.choice(cells_to_open)
-            self.grid[index[1]][index[0]]['open'] = True
-        if self.debug:
-            print("After one iteration")
-            print(self)
-            print(f"Cells to open: {len(cells_to_open)}")
-        return len(cells_to_open) != 0
-
-    def gen_grid(self):
-        for j in range(self.D):
-            row = []
-            for i in range(self.D):
-                row.append({'open': False, 'traversed' : False, 'captain_slot': False, 'alien_id' : -1, 'bot_occupied': False})
-            self.grid.append(row)
-        # Open Random Cell
-        rand_ind = np.random.randint(0, self.D, 2)
-        self.grid[rand_ind[1]][rand_ind[0]]['open'] = True
-        # Go through all cells in the grid 
-        # Any cell with one open neigbor, add the index to 
-        # And then select one at random
-        if self.debug:
-            print(self)
-        while self.gen_grid_iterate():
-            pass
-        cells_to_open = []
-        for j in range(self.D):
-            for i in range(self.D):
-                    all_neighbors = self.get_neighbors((i,j))
-                    open_neighbors = [ind for ind in all_neighbors if self.grid[ind[1]][ind[0]]['open']]
-                    closed_neighbors = [ind for ind in all_neighbors if not self.grid[ind[1]][ind[0]]['open']]
-                    if self.grid[j][i]['open'] and random.randint(0, 1) == 1 and len(open_neighbors) == 1:
-                        cells_to_open.append(random.choice(closed_neighbors))
-        for ind in cells_to_open:
-            self.grid[ind[1]][ind[0]]['open'] = True
-        if self.debug:
-            print("After dead end opening")
-            print(self)
-
-    def place_alien(self, ind, alien_id):
-        self.grid[ind[1]][ind[0]]['alien_id'] = alien_id
-    def remove_alien(self, ind):
-        self.grid[ind[1]][ind[0]]['alien_id'] = -1
-    # k tells us how deep to look from the index
-    def has_alien(self, ind, k=1):
-        if k == 1:
-            return self.grid[ind[1]][ind[0]]['alien_id'] != -1
-        elif k==2:
-            ret = self.grid[ind[1]][ind[0]]['alien_id'] != -1
-            neighbors = self.get_open_neighbors(ind)
-            return ret or all([self.has_alien(neighbor) for neighbor in neighbors])
-        else:
-            #print(f"Has_Alien: {ind}")
-            traversed = {}
-            children = deque([])
-            current = deque([ind])
-            #print("Has_Alien: depth more than 1")
-            while k >= 1:
-                #print(f" At inverse depth of {k}")
-                #print(f"Current Fringe: {current}")
-                for ind in current:
-                    traversed[ind] = 1
-                    if self.grid[ind[1]][ind[0]]['alien_id'] != -1:
-                        return True
-                    neighbors = self.get_open_neighbors(ind)
-                    #print(f"Neighbors before filter: {neighbors}")
-                    neighbors = [neighbor for neighbor in neighbors if neighbor not in traversed]
-                    #print(f"Neighbors after filter: {neighbors}")
-                    children.extend(neighbors)
-                current = children
-                children = deque([])
-                k -= 1
-            return False
-                
-                    
-                
-    def place_bot(self, ind):
-        self.grid[ind[1]][ind[0]]['bot_occupied'] = True
-    def remove_bot(self, ind):
-        self.grid[ind[1]][ind[0]]['bot_occupied'] = False
-    def set_traversed(self, ind):
-        self.grid[ind[1]][ind[0]]['traversed'] = True
-    def remove_all_traversal(self):
-        for j in range(self.D):
-            for i in range(self.D):
-                self.grid[j][i]['traversed'] = False
-
-    def get_open_indices(self):
-        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i]['open'] == True]
-
-    def get_unoccupied_open_indices(self):
-        return [(i, j) for i in range(self.D) for j in range(self.D) if self.grid[j][i]['open'] == True and self.grid[j][i]['alien_id'] == -1
-                and self.grid[j][i]['bot_occupied'] == False]
-
-    def reset_grid(self):
-        for j in range(self.D):
-            for i in range(self.D):
-                self.grid[j][i]['alien_id'] = -1
-                self.grid[j][i]['bot_occupied'] = False
-                self.grid[j][i]['captain_slot'] = False
-                self.grid[j][i]['traversed'] = False
-
-    def __str__(self):
-        s = ""
-        for j in range(self.D):
-            for i in range(self.D):
-                if self.grid[j][i]['open'] == True:
-                    if self.grid[j][i]['captain_slot']:
-                        s += colored('C', 'magenta')
-                    elif self.grid[j][i]['alien_id'] != -1:
-                        s += colored('A', 'red')
-                    elif self.grid[j][i]['bot_occupied']:
-                        s += colored('B', 'yellow')
-                    elif self.grid[j][i]['traversed']:
-                        s += colored('P', 'blue')
-                    else:
-                        s += colored('O', 'green')
-                else:
-                    s += 'X'
-            s += "\n"
-        return s
-
-class Alien:
-    alien_id = 0
-    aliens_ind = []
-    def __init__(self, grid):
+class bot1:
+    def __init__(self, grid, alpha = 0.08, k=2, debug=1):
         self.grid = grid
-        indices = self.grid.get_unoccupied_open_indices()
-        ind = random.choice(indices)
-        self.ind = ind
-        Alien.aliens_ind.append(ind)
-        self.alien_id = Alien.alien_id
-        self.grid.place_alien(ind, Alien.alien_id)
-        Alien.alien_id += 1
-        #print(ind)
+        self.pos = None
+        while self.pos == self.grid.crew_pos or self.pos is None:
+            self.pos = rd.choice(self.grid._grid.get_open_indices())
+        self.alpha = alpha
+        self.debug=debug
+        self.tick=0
+        self.k=k
 
-    def move(self):
-        neighbors = self.grid.get_open_neighbors(self.ind)
-        neighbors_without_aliens = [neighbor for neighbor in neighbors if self.grid.grid[neighbor[1]][neighbor[0]]['alien_id'] == -1]
-        if len(neighbors_without_aliens) > 0:
-            rand_ind = np.random.randint(0, len( neighbors_without_aliens ))
-            self.grid.remove_alien(self.ind)
-            self.ind = neighbors_without_aliens[rand_ind]
-            self.grid.place_alien(self.ind, self.alien_id)
-
-
-class PathTreeNode:
-    def __init__(self):
-        self.children = []
-        self.parent = None
-        self.data = None
+    def crew_sensor(self):
+        c = rd.random()
+        return c <= np.exp(-self.alpha
+                           * (self.grid.distance_to_crew(self.pos) - 1))
+    def alien_sensor(self):
+        found_alien = 0
+        for j in range(-self.k, self.k + 1):
+            for i in range(-self.k, self.k + 1):
+                if self.grid.grid[j][i].alien_id != -1:
+                    found_alien = 1
+        return found_alien
 
 
+    def update_belief(self, beep, falien):
+        # Crew Belief
+        generative_fn = lambda x: np.exp(-self.alpha*(x - 1)) if beep else (1 - np.exp(-self.alpha*(x-1)))
+        open_cells = self.grid._grid.get_unoccupied_open_indices()
 
-class Bot1:
-    def __init__(self, grid, captain_ind, debug=True):
-        self.grid = grid
-        self.captain_ind = captain_ind
-        self.ind = random.choice(self.grid.get_open_indices())
-        self.grid.place_bot(self.ind)
-        self.path = deque([])
-        self.debug = debug
+        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+        belief_sum = sum(flat_beliefs)
+        print(f"1. update belief function, sum of beliefs : {belief_sum}")
 
-    def plan_path(self):
-        self.path = deque([])
+        for ci in open_cells:
+            if ci == self.pos:
+                continue
+            gen_res = generative_fn(self.grid.distance(ci, self.pos))
+            if gen_res == 0:
+                pass
+                #print("DANGER!!!")
+                #print(f"Distance: {self.grid.distance(ci, self.pos)}, Beep: {beep}")
+            self.grid.grid[ci[1]][ci[0]].crew_belief *= gen_res
+        # Normalize
+        flat_beliefs = [self.grid.grid[ci[1]][ci[0]].crew_belief for ci in open_cells]
+        belief_sum = sum(flat_beliefs)
+        print(f"2. update belief function, sum of beliefs : {belief_sum}")
+        for ci in open_cells:
+            self.grid.grid[ci[1]][ci[0]].crew_belief /= belief_sum
+
+        # Alien Belief
+
+    def plan_path(self, dest):
         if self.debug:
             print("Planning Path...")  # If path is empty we plan one
-        self.grid.remove_all_traversal()
+        self.path = deque([])
+        self.grid._grid.remove_all_traversal()
         captain_found = False
         path_tree = PathTreeNode()
-        path_tree.data = self.ind
-        #path_deque = deque([path_tree])
-        path_deque = deque([self.ind])
-        path_map = {self.ind: None}
+        path_tree.data = self.pos
+        path_deque = deque([path_tree])
+        destination = None
         visited = set()
-        destination = None
+        compute_counter = 0
         while not captain_found:
-            if len(path_deque) == 0:
-                #raise RuntimeError("No Path Found!!!")
+            if len(path_deque) == 0 or compute_counter >= COMPUTE_LIMIT:
+                self.grid.remove_all_traversal()
                 return
-            #node = path_deque.popleft()
-            #ind = node.data
-            ind = path_deque.popleft()
+            compute_counter += 1
+            node = path_deque.popleft()
+            ind = node.data
+            if ind in visited:
+                continue
             visited.add(ind)
-            if self.debug:
-                print(f"Current Node: {ind}")
-            #self.grid.set_traversed(ind)
-            if ind == self.captain_ind:
-                destination = ind
-                break
-            neighbors_ind = self.grid.get_open_neighbors(ind)
-            neighbors_ind = [i for i in neighbors_ind if i not in visited]
-            for neighbor_ind in neighbors_ind:
-                # Add all possible paths that do not hit an alien
-                if not self.grid.has_alien(neighbor_ind):
-                    path_deque.append(neighbor_ind)
-                    path_map[neighbor_ind] = ind
-                    #new_node = PathTreeNode()
-                    #new_node.data = neighbor_ind
-                    #new_node.parent = node
-                    #node.children.append(new_node)
-
-            #path_deque.extend(node.children)
-        #self.grid.remove_all_traversal()
-        if self.debug:
-            print("Planning Done!")
-        reverse_path = []
-        next_ind = destination
-        while next_ind is not None:
-            reverse_path.append(next_ind)
-            next_ind = path_map[next_ind]
-        #node = destination
-        #while node.parent is not None:
-        #    reverse_path.append(node.data)
-        #    node = node.parent
-        self.path.extend(reversed(reverse_path))
-        for ind in self.path:
-            self.grid.set_traversed(ind)
-        if self.debug:
-            print("Planned Path")
-            print(self.grid)
-    #def plan_path(self):
-    #    if self.debug:
-    #        print("Planning Path...")  # If path is empty we plan one
-    #    self.path = deque([])
-    #    self.grid.remove_all_traversal()
-    #    captain_found = False
-    #    path_tree = PathTreeNode()
-    #    path_tree.data = self.ind
-    #    path_deque = deque([path_tree])
-    #    destination = None
-    #    while not captain_found:
-    #        if len(path_deque) == 0:
-    #            self.grid.remove_all_traversal()
-    #            #raise RuntimeError("No Path Found!!!")
-    #            return
-    #        node = path_deque.popleft()
-    #        ind = node.data
-    #        self.grid.set_traversed(ind)
-    #        if ind == self.captain_ind:
-    #            destination = node
-    #            break
-    #        neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
-    #        for neighbor_ind in neighbors_ind:
-    #            # Add all possible paths that do not hit an alien
-    #            if not self.grid.has_alien(neighbor_ind):
-    #                new_node = PathTreeNode()
-    #                new_node.data = neighbor_ind
-    #                new_node.parent = node
-    #                node.children.append(new_node)
-    #        path_deque.extend(node.children)
-    #    self.grid.remove_all_traversal()
-    #    if self.debug:
-    #        print("Planning Done!")
-    #    reverse_path = []
-    #    node = destination
-    #    while node.parent is not None:
-    #        reverse_path.append(node.data)
-    #        node = node.parent
-    #    self.path.extend(reversed(reverse_path))
-    #    for ind in self.path:
-    #        self.grid.set_traversed(ind)
-    #    if self.debug:
-    #        print("Planned Path")
-    #        print(self.grid)
-
-    def move(self):
-        if not self.path:
-            self.plan_path()
-        if len(self.path) == 0:
-            if self.debug:
-                print("No path found!")
-            return
-
-        next_dest = self.path.popleft()
-        self.grid.remove_bot(self.ind)
-        self.ind = next_dest
-        self.grid.place_bot(self.ind)
-            
-
-
-class Bot2:
-    def __init__(self, grid, captain_ind, debug = True):
-        self.grid = grid
-        self.captain_ind = captain_ind
-        self.ind = random.choice(self.grid.get_open_indices())
-        self.grid.place_bot(self.ind)
-        self.path = deque([])
-        self.debug = debug
-
-    def plan_path(self):
-        if self.debug:
-            print("Planning Path...")  # If path is empty we plan one
-        self.path = deque([])
-        self.grid.remove_all_traversal()
-        captain_found = False
-        path_tree = PathTreeNode()
-        path_tree.data = self.ind
-        path_deque = deque([path_tree])
-        destination = None
-        while not captain_found:
-            if len(path_deque) == 0:
-                self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
-                return
-            node = path_deque.popleft()
-            ind = node.data
-            self.grid.set_traversed(ind)
-            if ind == self.captain_ind:
+            self.grid._grid.set_traversed(ind)
+            if ind == dest:
                 destination = node
                 break
-            neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
+            neighbors_ind = self.grid._grid.get_untraversed_open_neighbors(ind)
             for neighbor_ind in neighbors_ind:
                 # Add all possible paths that do not hit an alien
-                if not self.grid.has_alien(neighbor_ind):
+                if not self.grid._grid.has_alien(neighbor_ind):
                     new_node = PathTreeNode()
                     new_node.data = neighbor_ind
                     new_node.parent = node
                     node.children.append(new_node)
             path_deque.extend(node.children)
-        self.grid.remove_all_traversal()
+        self.grid._grid.remove_all_traversal()
         if self.debug:
             print("Planning Done!")
         reverse_path = []
@@ -404,336 +120,81 @@ class Bot2:
             node = node.parent
         self.path.extend(reversed(reverse_path))
         for ind in self.path:
-            self.grid.set_traversed(ind)
+            self.grid._grid.set_traversed(ind)
         if self.debug:
             print("Planned Path")
-            print(self.grid)
 
     def move(self):
-        self.plan_path()
-        if len(self.path) == 0:
-            if self.debug:
-                print("No path found!")
-            return
-        next_dest = self.path.popleft()
-        self.grid.remove_bot(self.ind)
-        self.ind = next_dest
-        self.grid.place_bot(self.ind)
+        self.update_belief(self.crew_sensor(), 1)
 
+        neighbors = self.grid._grid.get_open_neighbors(self.pos)
+        neighbors = [n for n in neighbors if not self.grid.crew_pos == n]
+        neighbors.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        open_cells = self.grid._grid.get_unoccupied_open_indices()
 
-class Bot3:
-    def __init__(self, grid, captain_ind, debug = True):
-        self.grid = grid
-        self.captain_ind = captain_ind
-        self.ind = random.choice(self.grid.get_open_indices())
-        self.grid.place_bot(self.ind)
-        self.path = deque([])
-        self.debug = debug
-
-    def plan_path(self, k=2):
-        if self.debug:
-            print("Planning Path...")  # If path is empty we plan one
-        self.path = deque([])
-        self.grid.remove_all_traversal()
-        captain_found = False
-        path_tree = PathTreeNode()
-        path_tree.data = self.ind
-        path_deque = deque([path_tree])
-        destination = None
-        while not captain_found:
-            if len(path_deque) == 0:
-                self.grid.remove_all_traversal()
-                #raise RuntimeError("No Path Found!!!")
-                return
-            node = path_deque.popleft()
-            ind = node.data
-            self.grid.set_traversed(ind)
-            if ind == self.captain_ind:
-                destination = node
-                break
-            neighbors_ind = self.grid.get_untraversed_open_neighbors(ind)
-            for neighbor_ind in neighbors_ind:
-                # Add all possible paths that do not hit an alien
-                if not self.grid.has_alien(neighbor_ind, k = k):
-                    new_node = PathTreeNode()
-                    new_node.data = neighbor_ind
-                    new_node.parent = node
-                    node.children.append(new_node)
-            path_deque.extend(node.children)
-        self.grid.remove_all_traversal()
-        if self.debug:
-            print("Planning Done!")
-        reverse_path = []
-        node = destination
-        while node.parent is not None:
-            reverse_path.append(node.data)
-            node = node.parent
-        self.path.extend(reversed(reverse_path))
-        for ind in self.path:
-            self.grid.set_traversed(ind)
-        if self.debug:
-            print("Planned Path")
-            print(self.grid)
-
-    def move(self):
-        self.plan_path(2)
-        if len(self.path) == 0:
-            if self.debug:
-                print("Reverting...")
-            self.plan_path(1)
-            if len(self.path) == 0:
-                if self.debug:
-                    print("No path found")
-                return
-        next_dest = self.path.popleft()
-        self.grid.remove_bot(self.ind)
-        self.ind = next_dest
-        self.grid.place_bot(self.ind)
-
-class WorldState:
-    def __init__(self, debug=True):
-        self.debug = debug
-    def gen_grid(self):
-        self.grid = Grid(debug=self.debug)
-    def set_iters(self, iters):
-        self.iters = iters
-    def set_K_end(self, K_end):
-        self.K_end = K_end
-    def gen_world(self, K):
-        self.captain_ind = random.choice(self.grid.get_open_indices())
-        self.aliens = [Alien(self.grid) for _ in range(K)]
-        self.captain_found = False
-        self.bot_caught = False
-    def simulate_world(self, bot):
-        for _ in range(1000):
-            if self.bot_caught:
-                break
-            bot.move()
-            if bot.ind == self.captain_ind:
-                self.captain_found = True
-                break
-            for alien in self.aliens:
-                if bot.ind == alien.ind:
-                    self.bot_caught = True
-                    break
-                alien.move()
-                if bot.ind == alien.ind:
-                    self.bot_caught = True
-                    if self.debug:
-                        print("Failure")
-                    return -2
-                    break
-            if self.debug:
-                print("Next Iteration")
-                print(self.grid)
-                sleep(0.016)
-        if self.captain_found:
-            return 0
-            if self.debug:
-                print("Success")
+        self.grid._grid.remove_bot(self.pos)
+        dest_cell = max(open_cells, key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        self.plan_path(dest_cell)
+        if len(self.path) != 0:
+            self.pos = self.path[0]
+        elif self.grid.grid[neighbors[0][1]][neighbors[0][0]].crew_belief == self.grid.grid[neighbors[-1][1]][neighbors[-1][0]].crew_belief:
+            self.pos = rd.choice(neighbors)
         else:
-            return -1
-            if self.debug:
-                print("Failure")
+            self.pos = neighbors[-1]
+        self.grid._grid.place_bot(self.pos)
 
-def proc_fun(ws):
-    temp_dict = {}
-    data_dict = {}
-    for K in range(ws.K_end):
-        for b in range(3):
-            temp_dict[(b, K)] = [0, 0]
-    for _ in range(ws.iters):
-        for K in range(ws.K_end):
-            ws.gen_grid()
-            for b in range(3):
-                print(f"Process({os.getpid()}) Working on iter: {_}, K: {K}, Bot: {b + 1}...")
-                ws.grid.reset_grid()
-                ws.gen_world(K)
-                bot = None
-                if b == 0:
-                    bot = Bot1(ws.grid, ws.captain_ind, debug=ws.debug)
-                elif b == 1:
-                    bot = Bot2(ws.grid, ws.captain_ind, debug=ws.debug)
-                else:
-                    bot = Bot3(ws.grid, ws.captain_ind, debug=ws.debug)
-                ret = ws.simulate_world(bot)
-                if ret == 0:
-                    temp_dict[(b, K)][0] += 1
-                    temp_dict[(b, K)][1] += 1
-                elif ret == -1:
-                    temp_dict[(b, K)][1] += 1
-                elif ret == -2:
-                    pass
-                else:
-                    print("Ya fucked up bruv")
-    for b in range(3):
-        data_dict[b] = [[], []]
-        for K in range(ws.K_end):
-            data_dict[b][0].append(temp_dict[(b, K)][0])
-            data_dict[b][1].append(temp_dict[(b, K)][1])
-    return data_dict
+        if self.pos != self.grid.crew_pos:
+            self.grid.grid[self.pos[1]][self.pos[0]].crew_belief = 0.0
 
-class World:
-    def __init__(self, debug=True, track_time = False, jobs=1):
-        self.debug = debug
-        self.jobs = jobs
-        if jobs > 1:
-            self.states = [WorldState(debug=debug) for _ in range(jobs)]
-
-    def gen_grid(self):
-        self.grid = Grid(debug=self.debug)
-
-    def gen_world(self, K):
-        self.captain_ind = random.choice(self.grid.get_open_indices())
-        self.aliens = [Alien(self.grid) for _ in range(K)]
-        self.captain_found = False
-        self.bot_caught = False
-
-    def gather_data(self, iters=20, K_end=20):
-
-        self.data_dict = {}
-        for b in range(3):
-            for K in range(K_end):
-                self.data_dict[b] = [[], []]
-        if self.jobs > 1:
-            iters_per_job = iters//self.jobs
-            for ws in self.states:
-                ws.set_iters(iters_per_job)
-                ws.set_K_end(K_end)
-            p = Pool(self.jobs)
-            data = p.map(proc_fun, self.states)
-            for b in range(3):
-                for K in range(K_end):
-                    successes = 0
-                    survivals = 0
-                    for job_data in data:
-                        successes += job_data[b][0][K]
-                        survivals += job_data[b][1][K]
-                    self.data_dict[b][0].append(successes/(self.jobs * iters_per_job))
-                    self.data_dict[b][1].append(survivals/(self.jobs * iters_per_job))
-            for b in range(3):
-                self.data_dict[b][0] = np.array(self.data_dict[b][0])
-                self.data_dict[b][1] = np.array(self.data_dict[b][1])
-            print(self.data_dict)
-        else:
-            temp_dict = {}
-            for K in range(K_end):
-                for b in range(3):
-                    temp_dict[(b, K)] = [0, 0]
-            for _ in range(iters):
-                for K in range(K_end):
-                    self.gen_grid()
-                    start_time = time.perf_counter()
-                    for b in range(3):
-                        print(f"K={K},Bot {b + 1}, iter={_}")
-                        self.grid.reset_grid()
-                        self.gen_world(K)
-                        bot = None
-                        if b == 0:
-                            bot = Bot1(self.grid, self.captain_ind, debug=self.debug)
-                        elif b == 1:
-                            bot = Bot2(self.grid, self.captain_ind, debug=self.debug)
-                        else:
-                            bot = Bot3(self.grid, self.captain_ind, debug=self.debug)
-                        ret = self.simulate_world(bot)
-                        if ret == 0:
-                            temp_dict[(b, K)][0] += 1
-                            temp_dict[(b, K)][1] += 1
-                        elif ret == -1:
-                            temp_dict[(b, K)][1] += 1
-                        elif ret == -2:
-                            pass
-                        else:
-                            print("Ya fucked up bruv")
-                    end_time = time.perf_counter()
-            for b in range(3):
-                for K in range(K_end):
-                    self.data_dict[b][0].append(temp_dict[(b, K)][0]/iters)
-                    self.data_dict[b][1].append(temp_dict[(b, K)][1]/iters)
-            for b in range(3):
-                for i in range(2):
-                    self.data_dict[b][1] = np.array(self.data_dict[b][1])
-                    self.data_dict[b][0] = np.array(self.data_dict[b][0])
-            print(self.data_dict)
-    def plot_data(self):
-        K = len(self.data_dict[0][0])
-        x = np.arange(K)
-        for b in range(3):
-            plt.plot(x, self.data_dict[b][0], label=f"Bot {b + 1} Success")
-            plt.plot(x, self.data_dict[b][1], label=f"Bot { b + 1} Survival")
-        plt.legend()
-        plt.ylim(0.001, 1.0)
-        plt.show()
-
-    def simulate_world(self, bot):
-        for _ in range(1000):
-            if self.bot_caught:
-                break
-            bot.move()
-            if bot.ind == self.captain_ind:
-                self.captain_found = True
-                break
-            for alien in self.aliens:
-                if bot.ind == alien.ind:
-                    self.bot_caught = True
-                    break
-                alien.move()
-                if bot.ind == alien.ind:
-                    self.bot_caught = True
-                    if self.debug:
-                        print("Failure")
-                    return -2
-                    break
-            if self.debug:
-                print("Next Iteration")
-                print(self.grid)
-                sleep(0.016)
-        if self.captain_found:
-            return 0
-            if self.debug:
-                print("Success")
-        else:
-            return -1
-            if self.debug:
-                print("Failure")
-
-#debug = False
-#grid = Grid(debug=debug)
-#captain_ind = random.choice(grid.get_open_indices())
-#grid.grid[captain_ind[1]][captain_ind[0]]['captain_slot'] = True
-#bot = Bot1(grid, captain_ind, debug=debug)
-#print(f"Bot index: {bot.ind}")
-#aliens = [Alien(grid) for _ in range(100)]
-#print("After placing 10 alien")
-#print(grid)
-#captain_found = False
-#bot_caught = False
-#for _ in range(1000):
-#    if bot_caught:
-#        break
-#    bot.move()
-#    if bot.ind == captain_ind:
-#        captain_found = True
-#        break
-#    for alien in aliens:
-#        if bot.ind == alien.ind:
-#            bot_caught = True
-#            break
-#        alien.move()
-#        if bot.ind == alien.ind:
-#            bot_caught = True
-#            print("Failure")
-#            break
-#    print("Next Iteration")
-#    #for alien in aliens:
-#    #    print(f"Alien {alien.alien_id} position: {alien.ind}")
-#    print(grid)
-#    sleep(0.016)
-#if captain_found:
-#    print("Success")
-#else:
-#    print("Failure")
-plt.style.use('ggplot')
-w = World(debug=False, jobs=1)
-w.gather_data(iters=50, K_end=100)
-w.plot_data()
+        self.tick += 1
+        #possible_dir = self.grid.get_open_neighbors(self.pos)
+        #possible_dir.sort(key=lambda x: self.grid.grid[x[1]][x[0]].crew_belief)
+        #possible_dir.so
+gif_coll = []
+def plot_world_state(grid, bot):
+    red = [1., 0., 0.]
+    blue = [0., 0., 1.]
+    green = [0., 1., 0.]
+    yellow = [1., 1., 0.]
+    white = [1., 1., 1.]
+    black = [0., 0., 0.]
+    grid_img = []
+    open_cells = grid._grid.get_unoccupied_open_indices()
+    beliefs_flat = [grid.grid[oc[1]][oc[0]].crew_belief for oc in open_cells]
+    max_belief = max(beliefs_flat)
+    print(f"Max Belief: {max_belief}")
+    for j in range(grid.D):
+        grid_img.append([])
+        for i in range(grid.D):
+            if grid.crew_pos == (i, j):
+                grid_img[-1].append(green)
+            elif bot.pos == (i, j):
+                grid_img[-1].append(yellow)
+            elif grid.grid[j][i].open:
+                grid_img[-1].append([c*grid.grid[j][i].crew_belief/max_belief for c in blue])
+                if grid.grid[j][i].crew_belief < 0:
+                    print("TOO LOW")
+            else:
+                grid_img[-1].append(white)
+    plt.imshow(grid_img)
+    #plt.show()
+g = Grid2()
+b = bot1(g)
+MAX_TURNS = 200
+turns = 0
+for _ in range(MAX_TURNS):
+    print(f"Turn {_}")
+    b.move()
+    plot_world_state(g, b)
+    plt.savefig(f"tmp{_}.png", dpi=200)
+    gif_coll.append(Image.open(f"tmp{_}.png"))
+    turns += 1
+    if g.crew_pos == b.pos:
+        print("SUCCES: Crew member reached!")
+        break
+print("Saving gif...")
+#gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
+os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
+for _ in range(turns):
+    os.remove(f"tmp{_}.png")
+print("hello")
