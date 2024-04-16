@@ -4,15 +4,16 @@ from proj1 import PathTreeNode, GridAttrib, Grid
 from math import exp
 from collections import deque
 from matplotlib import pyplot as plt
+from multiprocessing import Process, Queue
 
 COMPUTE_LIMIT = 5000
 BB_SIZE = 40
 BB_SIZE_4D = 60
 
 class bot6:
-    def __init__(self, grid, alpha = 0.1, k=5, debug=1):
+    def __init__(self, grid, alpha = 0.1, k=5, debug=1, p=None):
         self.grid = grid
-        self.pos = None
+        self.pos = p
         while self.pos == self.grid.crew_pos or self.pos == self.grid.crew_pos2 or self.pos is None:
             self.pos = rd.choice(self.grid._grid.get_open_indices())
         self.alpha = alpha
@@ -85,14 +86,11 @@ class bot6:
             choose_fun = lambda x: self.within_alien_sensor(x)
         else:
             choose_fun = lambda x: not self.within_alien_sensor(x)
-
-
         open_cells = self.grid._grid.get_open_indices()
         # Cells inside the alien sensor and just outside
         # The probability will diffuse among these
         filtered_open_cells = [oc for oc in open_cells if ( choose_fun(oc) or self.alien_sensor_edge(oc, 1 if alien_found else 0) )]
-        #filtered_open_cells = open_cells
-        alien_belief = [[0 for _ in range(self.grid.D)] for __ in range(self.grid.D)]
+        alien_belief = zeros(self.grid.D, self.grid.D)
 
         # Diffuse through the edge cells
         for ci in filtered_open_cells:
@@ -103,7 +101,12 @@ class bot6:
             for n in neighbors:
                 alien_belief[n[1]][n[0]] += self.grid.grid[ci[1]][ci[0]].alien_belief/len(neighbors)
         # Normalizs
-        total_belief = sum([alien_belief[oc[1]][oc[0]] for oc in self.grid._grid.get_open_indices()])
+        open_cells = self.grid._grid.get_open_indices()
+        total_belief = sum([alien_belief[ci[1]][ci[0]] for ci in open_cells])
+        if total_belief == 0:
+            for ci in open_cells:
+                alien_belief[ci[1]][ci[0]] = 1.0 if choose_fun(ci) else 0.0
+        total_belief = sum([alien_belief[ci[1]][ci[0]] for ci in open_cells])
         for ci in open_cells:
             alien_belief[ci[1]][ci[0]] /= total_belief
         # Update the original probabilities
@@ -111,17 +114,15 @@ class bot6:
             self.grid.grid[ci[1]][ci[0]].alien_belief = alien_belief[ci[1]][ci[0]]
 
     def restrict_alien_prob(self, alien_found):
+        open_cells = self.grid._grid.get_open_indices()
         choose_fun = None
         if alien_found:
             choose_fun = lambda x: True #Dummy lambda to account for 2 aliens
         else:
             choose_fun = lambda x: not self.within_alien_sensor(x)
-
-        open_cells = self.grid._grid.get_open_indices()
-        filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
-        print(f"Cells to set to 0: {len(filtered_open_cells)}")
-        for ci in filtered_open_cells:
-            self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
+            filtered_open_cells = [oc for oc in open_cells if not choose_fun(oc)]
+            for ci in filtered_open_cells:
+                self.grid.grid[ci[1]][ci[0]].alien_belief = 0.0
         # Normalize
         total_belief = 0
         for ci in open_cells:
@@ -266,9 +267,9 @@ class bot6:
             exit(1)
 
 class bot7:
-    def __init__(self, grid, alpha=0.15, k=5, debug=1, bot_pos=None):
+    def __init__(self, grid, alpha=0.15, k=5, debug=1, p=None):
         self.grid = grid
-        self.pos = None if bot_pos is None else bot_pos
+        self.pos = p
         while self.pos in [self.grid.crew_pos, self.grid.crew_pos2] or self.pos is None:
             self.pos = rd.choice(self.grid._grid.get_open_indices())
         self.debug=debug
@@ -675,9 +676,9 @@ class bot7:
             pass
 
 class bot8:
-    def __init__(self, grid, alpha=0.15, k=5, debug=1, bot_pos=None):
+    def __init__(self, grid, alpha=0.15, k=5, debug=1, p=None):
         self.grid = grid
-        self.pos = None if bot_pos is None else bot_pos
+        self.pos = p
         while self.pos in [self.grid.crew_pos, self.grid.crew_pos2] or self.pos is None:
             self.pos = rd.choice(self.grid._grid.get_open_indices())
         self.debug=debug
@@ -1189,31 +1190,226 @@ class bot8:
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
             print("Success!")
             pass
-g = Grid2(debug=False)
-b6 = bot8(g)
-a = Alien(g._grid, b6)
-a2 = Alien(g._grid, b6)
-for _ in range(1000):
-    b6.move()
-    if a.ind == b6.pos:
-        print("Alien Capture!")
-        break
-    if a2.ind == b6.pos:
-        print("Alien Capture!")
-        break
-    if b6.pos == g.crew_pos:
-        print("SUCCESS")
-        break
-    print(f"Alien Positions: {a.ind}, {a2.ind}")
-    a.move()
-    #plot_world_state(g, b6)
-    plt.show()
-    if a.ind == b6.pos:
-        print("Alien Capture!")
-        break
-    if a.ind == b6.pos:
-        print("Alien Capture!")
-        break
-    if _ == 999:
-        print("Failed to capture!")
 
+
+
+class WorldState:
+    def __init__(self, max_runs=15, max_turns=400, alpha_list=[i/100 for i in range(1, 5)] + [i/10 for i in range(1, 5)], k = 5):
+        self.MAX_RUNS = max_runs
+        self.MAX_TURNS = max_turns
+        self.runs = [[], [], []]
+        self.captures = [0, 0, 0]
+        self.fails = [0, 0, 0]
+        self.turns = [0, 0, 0]
+        self.data = [[], [], []]
+        self.ret_turns = [[], [], []]
+        self.ret_fails = [[],[], []]
+        self.ret_captures = [[],[], []]
+        self.alpha_list = alpha_list
+        self.k = k
+
+    def simulate(self, q=None):
+        for alpha in self.alpha_list:
+            self.runs = [[], [], []]
+            self.captures = [0, 0, 0]
+            self.fails = [0, 0, 0]
+            self.turns = [0, 0, 0]
+            for __ in range(self.MAX_RUNS):
+                self.g = Grid2(debug=False, alpha=alpha)
+                b = bot6(self.g, alpha=alpha, debug=False, k=self.k)
+                a = Alien(self.g._grid, b)
+                a2 = Alien(self.g._grid, b)
+                alien_pos = a.ind
+                alien2_pos = a2.ind
+                bot_pos = b.pos
+                crew_pos1 = self.g.crew_pos
+                crew_pos2 = self.g.crew_pos2
+                #succ, run = simulate(g, b, a)
+                for _ in range(self.MAX_TURNS):
+                    print(f"Alpha: {alpha}, Turn {_}")
+                    b.move()
+                    if a.ind == b.pos or a2.ind == b.pos:
+                        print("FAILURE: Alien Capture!")
+                        self.captures[0] += 1
+                        break
+                    #plot_world_state(g, b)
+                    #plt.show(
+                    a.move()
+                    a2.move()
+                    self.turns[0] += 1
+                    if self.g.crew_pos == None and self.g.crew_pos2 == None:
+                        print("SUCCES: Crew member reached!")
+                        self.runs[0].append(_)
+                        break
+                    if a.ind == b.pos or a2.ind == b.pos:
+                        print("FAILURE: Alien Capture!")
+                        self.captures[0] += 1
+                        break
+                    if _ == self.MAX_TURNS - 1:
+                        self.fails[0] += 1
+                        break
+
+                # bot 4 runs now
+                del b
+                del a
+                del a2
+                print(f"Alien Pos: {alien_pos}")
+                print(f"Bot Pos: {bot_pos}")
+                #del g
+                self.g.reset_grid()
+                self.g.crew_pos = crew_pos1
+                self.g.crew_pos2 = crew_pos2
+                #g = Grid2(debug=False)
+                b = bot7(self.g, alpha=alpha, debug=False, p=bot_pos, k=self.k)
+                a = Alien(self.g._grid, b, p=alien_pos)
+                a2 = Alien(self.g._grid, b, p=alien2_pos)
+                for _ in range(self.MAX_TURNS):
+                    print(f"Turn {_}")
+                    b.move()
+                    if a.ind == b.pos or a2.ind == b.pos:
+                        print("FAILURE: Alien Capture!")
+                        self.captures[1] += 1
+                        break
+                    #plot_world_state(g, b)
+                    #plt.show()
+                    a.move()
+                    a2.move()
+                    self.turns[1] += 1
+                    if b.found_all_crew:
+                        print("SUCCES: Crew member reached!")
+                        self.runs[1].append(_)
+                        break
+                    if a.ind == b.pos or a2.ind == b.pos:
+                        print("FAILURE: Alien Capture!")
+                        self.captures[1] += 1
+                        break
+                    if _ == self.MAX_TURNS - 1:
+                        self.fails[1] += 1
+                        break
+
+                # bot 5 runs now
+                del b
+                del a
+                del a2
+                print(f"Alien Pos: {alien_pos}")
+                print(f"Bot Pos: {bot_pos}")
+                #del g
+                self.g.reset_grid()
+                self.g.crew_pos = crew_pos1
+                self.g.crew_pos2 = crew_pos2
+                #g = Grid2(debug=False)
+                b = bot8(self.g, alpha=alpha, debug=False, p=bot_pos, k=self.k)
+                a = Alien(self.g._grid, b, p=alien_pos)
+                a2 = Alien(self.g._grid, b, p=alien2_pos)
+                for _ in range(self.MAX_TURNS):
+                    print(f"Turn {_}")
+                    b.move()
+                    if a.ind == b.pos or a2.ind == b.pos:
+                        print("FAILURE: Alien Capture!")
+                        self.captures[2] += 1
+                        break
+                    #plot_world_state(g, b)
+                    #plt.show()
+                    a.move()
+                    a2.move()
+                    self.turns[2] += 1
+                    if b.found_all_crew:
+                        print("SUCCES: Crew member reached!")
+                        self.runs[2].append(_)
+                        break
+                    if a.ind == b.pos or a2.ind == b.pos:
+                        print("FAILURE: Alien Capture!")
+                        self.captures[2] += 1
+                        break
+                    if _ == self.MAX_TURNS - 1:
+                        self.fails[2] += 1
+                        break
+                
+            # bot 3 data stuff
+            print(f"Length Check: {len(self.runs[0])}")
+            self.data[0].append(sum(self.runs[0])/len(self.runs[0]) if len(self.runs[0]) > 0 else float('nan'))
+            self.ret_captures[0].append(self.captures[0])
+            self.ret_fails[0].append(self.fails[0])
+            self.ret_turns[0].append(self.turns[0])
+            
+            
+            # bot 4 data stuff
+            self.data[1].append(sum(self.runs[1])/len(self.runs[1]) if len(self.runs[1]) > 0 else float('nan'))
+            self.ret_captures[1].append(self.captures[1])
+            self.ret_fails[1].append(self.fails[1])
+            self.ret_turns[1].append(self.turns[1])
+            
+            
+            # bot 5 data stuff
+            self.data[2].append(sum(self.runs[2])/len(self.runs[2]) if len(self.runs[2]) > 0 else float('nan'))
+            self.ret_captures[2].append(self.captures[2])
+            self.ret_fails[2].append(self.fails[2])
+            self.ret_turns[2].append(self.turns[2])
+
+            if q is not None:
+                print("PUSHING")
+                ret_dict = {}
+                ret_dict["data"] = self.data
+                ret_dict["captures"] = self.ret_captures
+                ret_dict["fails"] = self.ret_fails
+                ret_dict["turns"] = self.ret_turns
+                q.put(ret_dict)
+                print("DONE PUSHING")
+            else:
+                print("Something is wrong!")
+                exit(-1)
+
+        return (self.data, self.alpha_list)
+
+
+def dispatch_jobs(jobs=6, alpha_list=[i/100 for i in range(1, 22, 5)]):
+    if len(alpha_list) % jobs > 0:
+        print("Not properly divisible!")
+        exit(-1)
+    queues = [Queue() for i in range(jobs)]
+    rets = [0 for i in range(jobs)]
+    alpha_lists = [alpha_list[i*(len(alpha_list)//jobs):(i + 1)*(len(alpha_list)//jobs)] for i in range(jobs)]
+    states = [WorldState(alpha_list=alpha_lists[i]) for i in range(jobs)]
+    print(alpha_lists[0])
+    processes = [Process(target=states[i].simulate, args=(), kwargs={"q": queues[i]}) for i in range(jobs)]
+    for p in processes:
+        p.start()
+    for i, q in enumerate(queues):
+        print("Getting data")
+        rets[i] = q.get()
+        print("Got data")
+    for p in processes:
+        p.join()
+    captures = [[], [], []]
+    fails = [[], [], []]
+    avg_turns = [[], [], []]
+    for i, r in enumerate(rets):
+        print(f"Return {i}: {r}")
+        avg_turns[0].extend(r["data"][0])
+        avg_turns[1].extend(r["data"][1])
+        avg_turns[2].extend(r["data"][2])
+        fails[0].extend(r["fails"][0])
+        fails[1].extend(r["fails"][1])
+        fails[2].extend(r["fails"][2])
+        captures[0].extend(r["captures"][0])
+        captures[1].extend(r["captures"][1])
+        captures[2].extend(r["captures"][2])
+    print(f"Bot 6 Avg Runs: {list(zip(avg_turns[0], alpha_list))}")
+    print(f"Bot 6 Captures: {captures[0]}")
+    print(f"Bot 6 Fails: {fails[0]}")
+    print(f"Bot 7 Avg Runs: {list(zip(avg_turns[1], alpha_list))}")
+    print(f"Bot 7 Captures: {captures[1]}")
+    print(f"Bot 7 Fails: {fails[1]}")
+    print(f"Bot 8 Avg Runs: {list(zip(avg_turns[2], alpha_list))}")
+    print(f"Bot 8 Captures: {captures[2]}")
+    print(f"Bot 8 Fails: {fails[2]}")
+    plt.plot(alpha_list, avg_turns[0], label="Bot 6")
+    plt.plot(alpha_list, avg_turns[1], label="Bot 7")
+    plt.plot(alpha_list, avg_turns[2], label="Bot 8")
+    plt.title("Average Turns Till Rescue")
+    plt.xlabel("Alpha")
+    plt.ylabel("Average Turns")
+    plt.legend()
+    plt.show()
+
+dispatch_jobs(jobs=1)
