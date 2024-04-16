@@ -1172,7 +1172,7 @@ class bot5:
         self.tick += 1
 
 class WorldState:
-    def __init__(self, max_runs=100, max_turns=400, alpha_list=[i/100 for i in range(1, 5)] + [i/10 for i in range(1, 5)]):
+    def __init__(self, max_runs=50, max_turns=400, alpha_list=[i/100 for i in range(1, 5)] + [i/10 for i in range(1, 5)], k=15):
         self.MAX_RUNS = max_runs
         self.MAX_TURNS = max_turns
         self.runs = [[], [], []]
@@ -1184,6 +1184,7 @@ class WorldState:
         self.ret_fails = [[],[], []]
         self.ret_captures = [[],[], []]
         self.alpha_list = alpha_list
+        self.k = k
 
     def simulate(self, q=None):
         for alpha in self.alpha_list:
@@ -1193,7 +1194,7 @@ class WorldState:
             self.turns = [0, 0, 0]
             for __ in range(self.MAX_RUNS):
                 self.g = Grid2(debug=False, alpha=alpha)
-                b = bot3(self.g, alpha=alpha, debug=False)
+                b = bot3(self.g, alpha=alpha, debug=False, k=self.k)
                 a = Alien(self.g._grid, b)
                 alien_pos = a.ind
                 bot_pos = b.pos
@@ -1241,7 +1242,7 @@ class WorldState:
                 self.g.crew_pos = crew_pos1
                 self.g.crew_pos2 = crew_pos2
                 #g = Grid2(debug=False)
-                b = bot4(self.g, alpha=alpha, debug=False, bot_pos=bot_pos)
+                b = bot4(self.g, alpha=alpha, debug=False, bot_pos=bot_pos, k=self.k)
                 a = Alien(self.g._grid, b, p=alien_pos)
                 for _ in range(self.MAX_TURNS):
                     print(f"Turn {_}")
@@ -1284,7 +1285,7 @@ class WorldState:
                 self.g.crew_pos = crew_pos1
                 self.g.crew_pos2 = crew_pos2
                 #g = Grid2(debug=False)
-                b = bot5(self.g, alpha=alpha, debug=False, p=bot_pos)
+                b = bot5(self.g, alpha=alpha, debug=False, p=bot_pos, k=self.k)
                 a = Alien(self.g._grid, b, p=alien_pos)
                 for _ in range(self.MAX_TURNS):
                     print(f"Turn {_}")
@@ -1476,107 +1477,3 @@ PLOT = False
 if __name__ == "__main__":
     dispatch_jobs(jobs=10)
 
-#def simulate(gr, bo, al):
-#    turns = 0
-#    #runs = []
-#    #captures = 0
-#    #fails = 0
-#    for _ in range(MAX_TURNS):
-#        print(f"Turn {_}")
-#        bo.move()
-#        if al.ind == bo.pos:
-#            print("FAILURE: Alien Capture!")
-#            return False, -1
-#            break
-#        if gr.grid[al.ind[1]][al.ind[0]].alien_belief == 0:
-#            print("Alien belief 0 at alien position!!!!")
-#            abel = [[gr.grid[j][i].alien_belief for i in range(g.D)] for j in range(g.D)]
-#            plt.imshow(abel)
-#            plt.show()
-#            exit(-1)
-#        al.move()
-#        if PLOT:
-#            plot_world_state(gr, bo)
-#            plt.savefig(f"tmp{_}.png", dpi=200)
-#            plt.close()
-#            #plt.show()
-#            #gif_coll.append(Image.open(f"tmp{_}.png"))
-#        turns += 1
-#        if gr.crew_pos == bo.pos:
-#            print("SUCCES: Crew member reached!")
-#            return True, _
-#            break
-#        if al.ind == bo.pos:
-#            print("FAILURE: Alien Capture!")
-#            return False, -1
-#            break
-#        if _ == MAX_TURNS - 1:
-#            return False, -2
-#            break
-
-
-#runs = [[], []]
-#captures = [0, 0]
-#fails = [0, 0]
-#turns = [0, 0]
-#for __ in range(MAX_RUNS):
-#    g = Grid2(debug=False)
-#    b = bot5(g, alpha=0.1, debug=True)
-#    a = Alien(g._grid, b)
-#    alien_pos = a.ind
-#    bot_pos = b.pos
-#    #succ, run = simulate(g, b, a)
-#    for _ in range(MAX_TURNS):
-#        print(f"Turn {_}")
-#        b.move()
-#        if g.grid[a.ind[1]][a.ind[0]].alien_belief == 0:
-#            print("Alien belief 0 at alien position!!!!")
-#        if a.ind == b.pos:
-#            print("FAILURE: Alien Capture!")
-#            captures[0] += 1
-#            break
-#        #plot_world_state(g, b)
-#        #plt.show()
-#        a.move()
-#        turns[0] += 1
-#        if b.found_all_crew:
-#            print("Success!")
-#            runs[0].append(_)
-#            break
-#        if a.ind == b.pos:
-#            print("FAILURE: Alien Capture!")
-#            captures[0] += 1
-#            break
-#        if _ == MAX_TURNS - 1:
-#            fails[0] += 1
-#            break
-#print(f"Bot 5 Runs: {runs[0]}")
-#print(f"Bot 5 Fails: {fails[0]}")
-#print(f"Bot 5 Captures: {fails[1]}")
-#gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
-#if PLOT:
-#    print("Saving gif...")
-#    os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
-#    for _ in range(turns[0]):
-#        os.remove(f"tmp{_}.png")
-#plt.style.use("ggplot")
-#w = WorldState()
-#data, alpha_list = w.simulate()
-#plt.xlabel("Alpha")
-#plt.ylabel("Avg Turns to Capture")
-#plt.plot(alpha_list, data[0], label="Bot3")
-#plt.plot(alpha_list, data[1], label="Bot4")
-#plt.plot(alpha_list, data[2], label="Bot5")
-#
-#print(f"data[0]: {data[0]}")
-#print(f"data[1]: {data[1]}")
-#print(f"data[2]: {data[2]}")
-#
-#plt.legend()
-#plt.savefig(f"bot345_bb70.png", dpi=200)
-#print("Bot 1 Output:")
-#print(f"Run output: {w.runs[0]}\nAlienCaptures: {w.captures[0]}\nFails: {w.fails[0]}")
-#print(f"Average steps: {sum(w.runs[0])/len(w.runs[0])}")
-#print("Bot 2 Output:")
-#print(f"Run output: {w.runs[1]}\nAlienCaptures: {w.captures[1]}\nFails: {w.fails[1]}")
-#print(f"Average steps: {sum(w.runs[1])/len(w.runs[1])}")
