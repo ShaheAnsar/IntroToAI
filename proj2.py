@@ -1430,7 +1430,7 @@ def plot_world_state(grid, bot):
         grid_img2.append([])
         grid_img3.append([])
         for i in range(grid.D):
-            if grid.crew_pos == (i, j):
+            if grid.crew_pos == (i, j) or grid.crew_pos2 == (i, j):
                 grid_img[-1].append(green)
             elif bot.pos == (i, j):
                 grid_img[-1].append(yellow)
