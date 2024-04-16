@@ -338,7 +338,6 @@ class bot6:
 
         if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
             print("Success!")
-            exit(1)
 
 gif_coll = []
 def plot_world_state(grid, bot):
@@ -404,8 +403,9 @@ def plot_world_state(grid, bot):
     plt.subplot(133)
     plt.imshow(grid_img3)
     #plt.show()
+    
 g = Grid2()
-b = bot3(g)
+b = bot6(g)
 a = Alien(g._grid)
 MAX_TURNS = 500
 turns = 0
@@ -426,6 +426,7 @@ for _ in range(MAX_TURNS):
     if g.crew_pos == b.pos:
         print("SUCCES: Crew member reached!")
         break
+
 print("Saving gif...")
 #gif_coll[0].save('animated.gif', save_all=True, append_images=gif_coll, duratin=len(gif_coll)*0.2, loop=0)
 os.system("ffmpeg -r 10 -i tmp%01d.png -vcodec mpeg4 -y -vb 400M movie.mp4")
