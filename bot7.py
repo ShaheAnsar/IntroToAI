@@ -262,10 +262,6 @@ class bot6:
 
         self.tick += 1
 
-        if self.grid.crew_pos == None and self.grid.crew_pos2 == None:
-            print("Success!")
-            exit(1)
-
 class bot7:
     def __init__(self, grid, alpha=0.15, k=5, debug=1, p=None):
         self.grid = grid
@@ -1356,8 +1352,7 @@ class WorldState:
                 q.put(ret_dict)
                 print("DONE PUSHING")
             else:
-                print("Something is wrong!")
-                exit(-1)
+                print("Better be single threaded mode")
 
         return (self.data, self.alpha_list)
 
@@ -1412,4 +1407,8 @@ def dispatch_jobs(jobs=6, alpha_list=[i/100 for i in range(1, 22, 5)]):
     plt.legend()
     plt.show()
 
-dispatch_jobs(jobs=1)
+dispatch_jobs(jobs=5)
+#ws = WorldState(alpha_list=[i/100 for i in range(1, 22, 5)])
+#ret = ws.simulate()
+#print("Simulation Over.\nResults:")
+#print(ret)
